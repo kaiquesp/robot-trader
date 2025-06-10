@@ -1,6 +1,8 @@
+// src/robot/runTradingBot.ts
+
 import { IndicatorService } from "../services/indicatorsService";
 import { OrderService } from "../services/orderService";
-import { PositionService } from "../services/positionService";
+import { PositionService as LivePositionService } from "../services/positionService";
 import { BotController } from "./botController";
 import { PositionManager } from "./positionManager";
 
@@ -8,24 +10,62 @@ const BASE_URL = process.env.TESTNET === "true"
   ? "https://testnet.binancefuture.com"
   : "https://fapi.binance.com";
 
-// Executa o bot
+/**
+ * Executa o bot em ambiente live, adaptando serviços para BotController.
+ */
 export async function runTradingBot() {
   const tradeAmount = 15;
-  const indicatorService = new IndicatorService();
-  const orderService = new OrderService(tradeAmount);
-  const positionManager = new PositionManager();
-  if (!process.env.BINANCE_API_KEY || !process.env.BINANCE_API_SECRET) {
-    throw new Error("BINANCE_API_KEY and BINANCE_API_SECRET must be defined in environment variables.");
-  }
-  const positionService = new PositionService(
+  const rawIndicator = new IndicatorService();
+  const rawOrder     = new OrderService(tradeAmount);
+  const rawPosition  = new LivePositionService(
     BASE_URL,
-    process.env.BINANCE_API_KEY,
-    process.env.BINANCE_API_SECRET
+    process.env.BINANCE_API_KEY!,
+    process.env.BINANCE_API_SECRET!
   );
-  const botController = new BotController(positionService, indicatorService, orderService, positionManager)
+  const positionManager = new PositionManager();
 
-  // Loop do trading bot
- setInterval(async () => {
-    await botController.run();
-  }, 0.25 * 60 * 1000); // A cada 5 minutos
+  // Adapter: indicador
+  const indicatorService = {
+    fetchIndicators: async (symbol: string) => {
+      const result = await rawIndicator.fetchIndicators(symbol);
+      if (result === null) {
+        throw new Error(`No indicators found for symbol: ${symbol}`);
+      }
+      return result;
+    },
+    // live não usa setCurrentTime, mas BotController aceita opcional
+    setCurrentTime: (ts: number) => {}
+  };
+
+  // Adapter: posição
+  const positionService = {
+    getOpenPositions: () => rawPosition.getOpenPositions()
+  };
+
+  // Adapter: ordens
+  const orderService = {
+    placeOrder: (symbol: string, side: 'BUY' | 'SELL') => rawOrder.placeOrder(symbol, side)
+  };
+
+  // Verifica credenciais
+  if (!process.env.BINANCE_API_KEY || !process.env.BINANCE_API_SECRET) {
+    throw new Error("BINANCE_API_KEY and BINANCE_API_SECRET must be defined");
+  }
+
+  // Cria controller desacoplado
+  const botController = new BotController(
+    positionService,
+    indicatorService,
+    orderService,
+    positionManager
+  );
+
+  // Loop do trading bot a cada 5 minutos
+  setInterval(async () => {
+    try {
+      await botController.run();
+    } catch (err) {
+      console.error("Erro no bot:", err);
+    }
+  }, 5 * 60 * 1000);
 }

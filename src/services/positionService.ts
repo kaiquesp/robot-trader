@@ -8,7 +8,7 @@ export interface OpenPosition {
   symbol: string;
   side: 'BUY' | 'SELL';
   entryPrice: number;
-  positionAmt: number;
+  entryTime?: number;
 }
 
 export class PositionService {

@@ -1,5 +1,3 @@
-// src/services/binanceService.ts
-
 import axios from 'axios';
 
 const BASE_URL = process.env.TESTNET === 'true'
@@ -14,115 +12,152 @@ export interface SymbolInfo {
   // ... outros campos do exchangeInfo.symbols
 }
 
-/**
- * Busca todos os símbolos da Binance (exchangeInfo) e retorna o array de objetos.
- */
+export interface Candle {
+  openTime: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+/** Converte intervalos ('15m','1h','1d' etc) em milissegundos. */
+function intervalToMs(interval: string): number {
+  const unit = interval.slice(-1);
+  const num  = parseInt(interval.slice(0, -1), 10);
+  switch (unit) {
+    case 'm': return num * 60_000;
+    case 'h': return num * 3_600_000;
+    case 'd': return num * 86_400_000;
+    default:  throw new Error(`Intervalo não suportado: ${interval}`);
+  }
+}
+
+/** Busca todos os símbolos (exchangeInfo) */
 export async function fetchAllSymbols(): Promise<SymbolInfo[]> {
   try {
     const resp = await axios.get<{ symbols: SymbolInfo[] }>(
       `${BASE_URL}/fapi/v1/exchangeInfo`
     );
     return resp.data.symbols;
-  } catch (err: any) {
-    console.error('❌ Erro ao buscar todos os símbolos (exchangeInfo):', err.message ?? err);
+  } catch {
     return [];
   }
 }
 
-export async function fetchLongShortRatio(symbol: string): Promise<number | null> {
-  try {
-    const resp = await axios.get(
-      `https://fapi.binance.com/futures/data/globalLongShortAccountRatio`,
-      {
-        params: {
-          symbol,        // ex: "BTCUSDT"
-          period: '5m',  // deve ser uma das enums: "5m","15m","30m","1h",…
-          limit: 1       // só queremos o mais recente
-        }
-      }
-    );
-    const data = resp.data;
-    if (Array.isArray(data) && data.length > 0 && data[0].longShortRatio != null) {
-      return parseFloat(data[0].longShortRatio);
-    }
-    return null;
-  } catch (err: any) {
-    // Se quiser logar 400 sem poluir muito, trate aqui:
-    if (err.response?.status === 400) {
-      console.warn(`⚠️ Parâmetros inválidos em LongShortRatio para ${symbol}:`, err.response.data);
-      return null;
-    }
-    console.error(`❌ Erro ao buscar LongShortRatio para ${symbol}:`, err.message ?? err);
-    return null;
+/**
+ * Retorna o Long-Short Ratio (histórico ou live).
+ */
+export async function fetchLongShortRatio(
+  symbol: string,
+  timestamp?: number
+): Promise<number> {
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+  const url = `${BASE_URL}/futures/data/takerlongshortRatio`;
+  const params: any = { symbol, period: '1h', limit: 1 };
+
+  if (timestamp != null && Date.now() - timestamp <= THIRTY_DAYS_MS) {
+    params.startTime = timestamp;
+    params.endTime   = timestamp;
   }
+
+  const res = await axios.get<{ buySellRatio: string }[]>(url, { params });
+  return res && res.data[0] && res.data[0].buySellRatio ? parseFloat(res.data[0].buySellRatio) : 0;
 }
 
 /**
- * Retorna a Funding Rate mais recente para o símbolo,
- * ou null se não estiver disponível (erro 400/404 ou dados faltando).
+ * Retorna a Funding Rate mais recente ou null.
  */
-export async function fetchFundingRate(symbol: string): Promise<number | null> {
+export async function fetchFundingRate(symbol: string): Promise<number> {
   try {
     const resp = await axios.get(
-      `https://fapi.binance.com/fapi/v1/fundingRate`,
+      `${BASE_URL}/fapi/v1/fundingRate`,
       { params: { symbol, limit: 1 } }
     );
     const data = resp.data;
-    if (Array.isArray(data) && data.length > 0 && data[0].fundingRate != null) {
+    if (Array.isArray(data) && data.length && data[0].fundingRate != null) {
       return parseFloat(data[0].fundingRate);
     }
-    return null;
-  } catch (err: any) {
-    if (err.response?.status === 400 || err.response?.status === 404) {
-      console.warn(`⚠️ FundingRate não disponível para ${symbol}:`, err.response.data);
-      return null;
-    }
-    console.error(`❌ Erro ao buscar FundingRate para ${symbol}:`, err.message ?? err);
-    return null;
+  } catch {
+    // ignore
   }
+  return 0;
 }
 
 /**
- * Retorna o Open Interest mais recente para o símbolo,
- * ou null se não estiver disponível (erro 400/404).
+ * Retorna o Open Interest (histórico ou live), com fallback.
  */
-export async function fetchOpenInterest(symbol: string): Promise<number | null> {
-  try {
-    const resp = await axios.get(
-      `https://fapi.binance.com/fapi/v1/openInterest`,
-      { params: { symbol } }
-    );
-    // retorne o valor numérico de openInterest
-    if (resp.data && resp.data.openInterest != null) {
-      return parseFloat(resp.data.openInterest);
+export async function fetchOpenInterest(
+  symbol: string,
+  timestamp?: number
+): Promise<number> {
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+  if (timestamp != null && Date.now() - timestamp <= THIRTY_DAYS_MS) {
+    try {
+      const res = await axios.get<any[]>(
+        `${BASE_URL}/futures/data/openInterestHist`,
+        { params: { symbol, period: '1h', startTime: timestamp, endTime: timestamp, limit: 1 } }
+      );
+      return parseFloat(res.data[0].sumOpenInterest);
+    } catch {
+      // fallback para live
     }
-    return null;
-  } catch (err: any) {
-    if (err.response?.status === 400 || err.response?.status === 404) {
-      console.warn(`⚠️ OpenInterest não disponível para ${symbol}:`, err.response.data);
-      return null;
-    }
-    console.error(`❌ Erro ao buscar OpenInterest para ${symbol}:`, err.message ?? err);
-    return null;
   }
+
+  // live
+  const live = await axios.get<{ openInterest: string }>(
+    `${BASE_URL}/fapi/v1/openInterest`,
+    { params: { symbol } }
+  );
+  return parseFloat(live.data.openInterest);
 }
 
 /**
- * Retorna as últimas velas (klines) para o símbolo, intervalo e limite fornecidos.
+ * Retorna klines entre startTime e endTime, se fornecidos.
  */
 export async function fetchKlines(
+  symbol:   string,
+  interval: string,
+  startTime?: number,
+  endTime?:   number
+): Promise<any[]> {
+  const params: any = { symbol, interval };
+  if (startTime != null) params.startTime = startTime;
+  if (endTime   != null) params.endTime   = endTime;
+  const res = await axios.get<any[]>(
+    `${BASE_URL}/fapi/v1/klines`,
+    { params }
+  );
+  return res.data;
+}
+
+/**
+ * Busca todos os candles entre startTime e endTime, paginando.
+ */
+export async function fetchAllKlines(
   symbol: string,
   interval: string,
-  limit: number
-): Promise<any[]> {
-  try {
-    const resp = await axios.get(
-      `${BASE_URL}/fapi/v1/klines`,
-      { params: { symbol, interval, limit } }
-    );
-    return resp.data;
-  } catch (err: any) {
-    console.error(`❌ Erro ao buscar klines para ${symbol}:`, err.message ?? err);
-    return [];
+  startTime: number,
+  endTime: number
+): Promise<Candle[]> {
+  const limit = 1000;
+  let cursor = startTime;
+  const all: Candle[] = [];
+
+  while (cursor < endTime) {
+    const slice = await axios
+      .get<any[]>(`${BASE_URL}/fapi/v1/klines`, { params: { symbol, interval, startTime: cursor, limit } })
+      .then(r => r.data);
+    if (!slice.length) break;
+
+    const chunk = slice.map(c => ({
+      openTime: c[0], open: +c[1], high: +c[2], low: +c[3], close: +c[4], volume: +c[5]
+    }));
+    all.push(...chunk);
+    cursor = chunk[chunk.length - 1].openTime + intervalToMs(interval);
+    if (slice.length < limit) break;
   }
+
+  return all;
 }

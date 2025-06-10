@@ -1,16 +1,32 @@
-// src/robot/botController.ts
-
-import { IndicatorService } from "../services/indicatorsService";
-import { OrderService } from "../services/orderService";
-import { OpenPosition, PositionService } from "../services/positionService";
+import { Indicators } from "../models/Indicators";
+import { OpenPosition } from "../services/positionService";
 import { PositionManager } from "./positionManager";
 
-
+/**
+ * Controller do robô de trading, genérico para live e backtest.
+ */
 export class BotController {
   constructor(
-    private positionService: PositionService,
-    private indicatorService: IndicatorService,
-    private orderService: OrderService,
+    /**
+     * Serviço de posições, precisa apenas de getOpenPositions().
+     */
+    private positionService: { getOpenPositions(): Promise<OpenPosition[]> },
+
+    /**
+     * Serviço de indicadores, precisa apenas de fetchIndicators().
+     */
+    private indicatorService: {
+      fetchIndicators(symbol: string): Promise<Indicators>;
+      setCurrentTime?(ts: number): void;
+    },
+
+    /**
+     * Serviço de ordens, precisa apenas de placeOrder().
+     */
+    private orderService: {
+      placeOrder(symbol: string, side: 'BUY' | 'SELL'): Promise<void>;
+    },
+
     private positionManager: PositionManager
   ) {}
 
@@ -18,28 +34,35 @@ export class BotController {
     // 1) busca posições abertas
     const openPositions: OpenPosition[] = await this.positionService.getOpenPositions();
 
-    // 2) percore símbolos que estão *ou não* em posição
-    const symbols = await this.positionManager.getSymbols(); // se estiver em outro lugar
+    // 2) itera símbolos (live ou backtest)
+    const symbols = await this.positionManager.getSymbols();
     for (const symbol of symbols) {
-      // primeiro, se já tiver posição aberta, avalia se deve fechar
       const existing = openPositions.find(p => p.symbol === symbol);
-      if (existing) {
-        // decide pela regra de fechamento baseada em indicadores...
-        const ind = await this.indicatorService.fetchIndicators(symbol);
-        if (ind && this.positionManager.shouldClosePosition(existing, ind)) {
-          await this.orderService.placeOrder(symbol, existing.side === 'BUY' ? 'SELL' : 'BUY');
-          console.log(`⚠️ Fechando posição ${existing.side} em ${symbol}`);
-        }
+      const ind = await this.indicatorService.fetchIndicators(symbol);
+
+      if (!ind.closes) {
+        console.warn(`Indicadores para ${symbol} não possuem 'closes', pulando...`);
         continue;
       }
 
-      // se não tiver, decide abertura
-      const ind = await this.indicatorService.fetchIndicators(symbol);
-      if (ind) {
-        const action = this.positionManager.determineAction(symbol, ind);
-        if (action) {
-          await this.orderService.placeOrder(symbol, action);
-          console.log(`✅ Abrindo ${action} em ${symbol}`);
+      if (existing) {
+        // regra de fechamento
+        if (ind.closes) {
+          // Type assertion is safe here because of the check above
+          if (this.positionManager.shouldClosePosition(existing, ind as any)) {
+            const side = existing.side === 'BUY' ? 'SELL' : 'BUY';
+            await this.orderService.placeOrder(symbol, side);
+            console.log(`⚠️ Fechando ${existing.side} em ${symbol}`);
+          }
+        }
+      } else {
+        // regra de abertura
+        if (ind.closes) {
+          const action = this.positionManager.determineAction(symbol, ind as any);
+          if (action) {
+            await this.orderService.placeOrder(symbol, action);
+            console.log(`✅ Abrindo ${action} em ${symbol}`);
+          }
         }
       }
     }

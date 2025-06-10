@@ -7,6 +7,7 @@ export interface OpenPosition {
   symbol: string;
   side: 'BUY' | 'SELL';
   entryPrice: number;
+  
 }
 
 export class PositionManager {
@@ -37,6 +38,9 @@ export class PositionManager {
    */
   determineAction(symbol: string, ind: Indicators): 'BUY' | 'SELL' | null {
     const { lsr, support, resistance, closes, cvd } = ind;
+    if (!closes || closes.length === 0 || !cvd || cvd.length === 0) {
+      return null;
+    }
     const price = closes[closes.length - 1];
 
     // NÃO temos previous OI, então usamos CVD para indicar "OI subindo"
@@ -46,8 +50,8 @@ export class PositionManager {
 
     // Proximidade de suporte/resistência (1% de faixa)
     const proxThreshold = 0.01;
-    const nearSupport     = price <= support * (1 + proxThreshold);
-    const nearResistance  = price >= resistance * (1 - proxThreshold);
+    const nearSupport     = support !== undefined && price <= support * (1 + proxThreshold);
+    const nearResistance  = resistance !== undefined && price >= resistance * (1 - proxThreshold);
 
     // Regra de COMPRA
     if (
@@ -77,15 +81,18 @@ export class PositionManager {
    */
   shouldClosePosition(pos: OpenPosition, ind: Indicators): boolean {
     const { lsr, support, resistance, closes, cvd } = ind;
+    if (!closes || closes.length === 0) {
+      return false;
+    }
     const price = closes[closes.length - 1];
-    const oiRising = cvd[cvd.length - 1] > cvd[0];
+    const oiRising = !!cvd && cvd.length > 0 && cvd[cvd.length - 1] > cvd[0];
 
     if (pos.side === 'BUY') {
       // BUY: esperar razão >1, oi subindo e preço toca/resiste
-      return lsr! > 1 && oiRising && price >= resistance * 0.99;
+      return lsr! > 1 && oiRising && resistance !== undefined && price >= resistance * 0.99;
     } else {
       // SELL: esperar razão ≤1, oi subindo e preço toca/suporta
-      return lsr! <= 1 && oiRising && price <= support * 1.01;
+      return lsr! <= 1 && oiRising && support !== undefined && price <= support * 1.01;
     }
   }
 }

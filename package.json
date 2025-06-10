@@ -5,7 +5,8 @@
   "scripts": {
     "build": "tsc",
     "start": "npx tsc && node dist/index.js",
-    "build:start": "npm run build && npm run start"
+    "build:start": "npm run build && npm run start",
+    "backtest": "ts-node src/backtest/oneYearBacktest.ts"
   },
   "dependencies": {
     "@binance/futures-connector": "^0.1.7",
@@ -17,7 +18,9 @@
     "ws": "^8.14.2"
   },
   "devDependencies": {
+    "@types/node": "^22.15.30",
     "@types/ws": "^8.5.4",
+    "ts-node": "^10.9.2",
     "typescript": "^4.9.5"
   }
 }
