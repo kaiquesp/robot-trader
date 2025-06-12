@@ -1,26 +1,24 @@
 // src/services/orderService.ts
 
 import { UMFutures } from "@binance/futures-connector";
-import { getTimeOffset } from "../utils/timeOffset";
-import { fetchKlines } from "./binanceService";
-import crypto from 'crypto';
+import axios from "axios";
+import crypto from "crypto";
+import "dotenv/config";
+import { OpenPosition } from "../robot/positionManager";
 import {
-  fetchExchangeFilters,
-  FullSymbolFilters
+  fetchExchangeFilters
 } from "../utils/exchangeFilters";
 import {
   calculateQuantity,
   ceilQty
 } from "../utils/quantize";
-import "dotenv/config";
-import { OpenPosition } from "../robot/positionManager";
-import axios from 'axios';
+import { getTimeOffset } from "../utils/timeOffset";
+import { BOT_TIMEFRAME } from "../configs/botConstants";
+import { fetchKlines } from "./binanceService";
 
 const BASE_URL = process.env.TESTNET === "true"
   ? "https://testnet.binancefuture.com"
   : "https://fapi.binance.com";
-
-const skipSymbols = new Set<string>();
 
 export class OrderService {
   private client: UMFutures;
@@ -34,27 +32,23 @@ export class OrderService {
   }
 
   async placeOrder(symbol: string, side: "BUY" | "SELL"): Promise<void> {
-    if (skipSymbols.has(symbol)) return;
-
-    const fullFilters = await fetchExchangeFilters();
-    const filters = fullFilters[symbol];
+    const filters = (await fetchExchangeFilters())[symbol];
     if (!filters) return;
 
-    const klines = await fetchKlines(symbol, "5m", 1);
+    // 1) pega só o último candle de 5m
+    let klines: any[] = [];
+    try {
+      klines = await fetchKlines(symbol, BOT_TIMEFRAME);
+    } catch {
+      klines = [];
+    }
+
     if (!klines.length) return;
     const lastClose = parseFloat(klines[0][4]);
 
-    // 1) calcula qty já respeitando floor/ceil
-    let quantity = calculateQuantity(
-      this.tradeAmount,
-      lastClose,
-      filters.stepSize,
-      side
-    );
-    let qtyNum = parseFloat(quantity);
-    let notional = qtyNum * lastClose;
-
-    // 2) se abaixo do minNotional, faz ceil para minNotional
+    // 2) calcula quantidade
+    let quantity = calculateQuantity(this.tradeAmount, lastClose, filters.stepSize, side);
+    let notional = parseFloat(quantity) * lastClose;
     if (notional < filters.minNotional) {
       const rawMinQty = filters.minNotional / lastClose;
       const minQtyNum = ceilQty(rawMinQty, filters.stepSize);
@@ -65,96 +59,184 @@ export class OrderService {
       );
     }
 
+    // 3) envia MARKET
     const offset = await getTimeOffset();
+    const timestamp = Date.now() + offset;
+    const recvWindow = 60_000;
 
     try {
-      await this.client.newOrder(
+      const result = await this.client.newOrder(
         symbol,
         side,
         "MARKET",
-        { quantity, timestamp: Date.now() + offset, recvWindow: 60000 }
+        { quantity, reduceOnly: false, timestamp, recvWindow, priceProtect: false }
       );
       console.log(`✅ MARKET ${side} │ ${symbol} @ qty=${quantity}`);
     } catch (err: any) {
       const data = err.response?.data;
-      if (data?.code === -4131) {
-        skipSymbols.add(symbol);
-        console.error(`❌ PERCENT_PRICE em ${symbol}, pulando futuros.`);
+      if ([-4131, -2020, -1111].includes(data?.code)) {
+        console.warn(`⚠️ Erro [${data.code}] em ${symbol}, pulando: ${data.msg}`);
         return;
       }
-      if (data?.code === -2020) {
-        skipSymbols.add(symbol);
-        console.error(`❌ Unable to fill em ${symbol}, pulando futuros.`);
-        return;
-      }
-      if (data?.code === -1111) {
-        skipSymbols.add(symbol);
-        console.error(`❌ Precision is over the maximum defined for this asset em ${symbol}, pulando futuros.`);
-        return;
-      }
-      console.error(
-        `❌ erro MARKET ${side} em ${symbol}:`,
-        data ? `[${data.code}] ${data.msg}` : err.message
-      );
-      // throw err;
+      console.error(`❌ erro MARKET ${side} em ${symbol}:`, data?.msg ?? err.message);
     }
   }
 
-  /** Gera a assinatura HMAC-SHA256 sobre a query string */
-  private sign(query: string): string {
-    const secret = process.env.BINANCE_API_SECRET;
-    if (!secret) {
-      throw new Error("BINANCE_API_SECRET is not defined in environment variables.");
-    }
-    return crypto
-      .createHmac('sha256', secret)
-      .update(query)
-      .digest('hex');
-  }
 
- /**
-   * Busca todas as posições abertas (positionAmt ≠ 0) na conta Futures
-   * e retorna só symbol, side, entryPrice e quantidade.
+
+  /**
+   * Cancela todas as ordens abertas e zera posições para cada símbolo passado.
    */
-  async getOpenPositions(): Promise<OpenPosition[]> {
-    // 1) monta timestamp + recvWindow
-    const offset = await getTimeOffset();    // se não usar offset, remova esta linha
+  public async resetAll(symbols: string[]): Promise<void> {
+    const offset = await getTimeOffset();
     const timestamp = Date.now() + offset;
     const recvWindow = 60_000;
+    const signature = this.sign(`timestamp=${timestamp}&recvWindow=${recvWindow}`);
 
-    // 2) query string pra assinatura
-    const query = `timestamp=${timestamp}&recvWindow=${recvWindow}`;
-    const signature = this.sign(query);
+    // 1) Cancelar todas as ordens abertas via REST
+    for (const symbol of symbols) {
+      try {
+        console.log(`🔹 Cancelando ordens abertas em ${symbol}`);
+        await this.client.cancelAllOpenOrders({ symbol });
+      } catch (err: any) {
+        console.warn(`⚠️ Erro ao cancelar ordens em ${symbol}: ${err.response?.data?.msg || err.message}`);
+      }
+    }
 
-    // 3) chamada HTTP
-    const resp = await axios.get<{ 
-      symbol: string; 
-      positionAmt: string; 
-      entryPrice: string; 
+    // 2) Pegar posições abertas e fechar com MARKET + reduceOnly
+    const resp = await axios.get<{
+      symbol: string;
+      positionAmt: string;
+      entryPrice: string;
     }[]>(
       `${BASE_URL}/fapi/v2/positionRisk`,
       {
-        params: {
-          timestamp,
-          recvWindow,
-          signature
-        },
-        headers: {
-          'X-MBX-APIKEY': process.env.BINANCE_API_KEY
-        }
+        params: { timestamp, recvWindow, signature },
+        headers: { "X-MBX-APIKEY": process.env.BINANCE_API_KEY }
       }
     );
 
-    // 4) filtra e mapeia só posições !== 0
-    const open: OpenPosition[] = resp.data
+    const openPositions = resp.data
+      .filter(p => Math.abs(parseFloat(p.positionAmt)) > 0)
+      .map(p => ({
+        symbol: p.symbol,
+        side: parseFloat(p.positionAmt) > 0 ? "BUY" : "SELL",
+        positionAmt: Math.abs(parseFloat(p.positionAmt))
+      }));
+
+    for (const pos of openPositions) {
+      if (!symbols.includes(pos.symbol)) continue;
+      const closeSide = pos.side === "BUY" ? "SELL" : "BUY";
+      const qty = pos.positionAmt.toString();
+
+      try {
+        console.log(`  ↳ Fechando ${pos.symbol} via MARKET ${closeSide} qty=${qty}`);
+        await this.client.newOrder(
+          pos.symbol,
+          closeSide,
+          "MARKET",
+          {
+            quantity: qty,
+            reduceOnly: true,
+            timestamp,
+            priceProtect: false,
+            recvWindow
+          }
+        );
+      } catch (err: any) {
+        console.error(`❌ Falha ao fechar ${pos.symbol}: ${err.response?.data?.msg || err.message}`);
+      }
+    }
+
+    console.log("✅ Reset completo.");
+  }
+
+  /** Assina query string para endpoints privados */
+  private sign(query: string): string {
+    const secret = process.env.BINANCE_API_SECRET!;
+    return crypto.createHmac("sha256", secret).update(query).digest("hex");
+  }
+
+  /**
+   * Busca todas as posições abertas (positionAmt ≠ 0) na conta Futures.
+   */
+  async getOpenPositions(): Promise<OpenPosition[]> {
+    const offset = await getTimeOffset();
+    const timestamp = Date.now() + offset;
+    const recvWindow = 60_000;
+    const signature = this.sign(`timestamp=${timestamp}&recvWindow=${recvWindow}`);
+
+    const resp = await axios.get<{
+      symbol: string;
+      positionAmt: string;
+      entryPrice: string;
+    }[]>(
+      `${BASE_URL}/fapi/v2/positionRisk`,
+      {
+        params: { timestamp, recvWindow, signature },
+        headers: { "X-MBX-APIKEY": process.env.BINANCE_API_KEY }
+      }
+    );
+
+    return resp.data
       .filter(p => parseFloat(p.positionAmt) !== 0)
       .map(p => ({
         symbol: p.symbol,
-        side: parseFloat(p.positionAmt) > 0 ? 'BUY' : 'SELL',
+        side: parseFloat(p.positionAmt) > 0 ? "BUY" : "SELL",
         entryPrice: parseFloat(p.entryPrice),
         positionAmt: parseFloat(p.positionAmt)
       }));
+  }
 
-    return open;
+  async closeAllOpenPositions(): Promise<void> {
+    const positions = await this.getOpenPositions();
+    if (!positions.length) {
+      console.log("ℹ️ Nenhuma posição aberta encontrada.");
+      return;
+    }
+
+    console.log(`🔒 ZERANDO ${positions.length} posição(ões) e cancelando ordens…`);
+    for (const pos of positions) {
+      // antes: await this.client.cancelAllOpenOrders({ symbol: pos.symbol });
+      try {
+        await this.client.cancelAllOpenOrders(pos.symbol);
+        console.log(`🗑️  Ordens abertas em ${pos.symbol} canceladas.`);
+      } catch (err: any) {
+        console.warn(
+          `⚠️ Não foi possível cancelar ordens em ${pos.symbol}:`,
+          err.response?.data?.msg ?? err.message
+        );
+      }
+
+      // agora fecha a posição em MARKET+reduceOnly com priceProtect
+      const side = pos.side === "BUY" ? "SELL" : "BUY";
+      const quantity = Math.abs(pos.positionAmt ?? 0).toString();
+      const offset = await getTimeOffset();
+      const timestamp = Date.now() + offset;
+      const recvWindow = 60_000;
+
+      try {
+        await this.client.newOrder(
+          pos.symbol,
+          side,
+          "MARKET",
+          {
+            quantity,
+            reduceOnly: true,
+            priceProtect: false,
+            timestamp,
+            recvWindow
+          }
+        );
+        console.log(`✅ Fechado ${pos.symbol} → ${side} qty=${quantity}`);
+      } catch (err: any) {
+        console.error(
+          `❌ Falha ao fechar ${pos.symbol}:`,
+          err.response?.data?.msg ?? err.message
+        );
+      }
+    }
+
+    console.log("✅ Todos os fechamentos e cancelamentos solicitados.");
   }
 }

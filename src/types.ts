@@ -1,3 +1,7 @@
+import { TradeDetail } from "./models/tradeDetail";
+
+declare module 'qrcode-terminal';
+
 // ------------------------------
 // types.ts
 // ------------------------------
@@ -79,3 +83,18 @@ export interface PriceFilter {
   tickSize: number;
   minPrice: number;
 }
+
+export interface BacktestResult {
+  startDate: string;
+  endDate: string;
+  totalTrades: number;
+  wins: number;
+  losses: number;
+  profit: number;
+  maxDrawdown: number;
+  trades: TradeDetail[];
+}
+
+export {
+  TradeDetail // quando @openInterest
+};

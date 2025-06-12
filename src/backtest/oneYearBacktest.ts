@@ -1,210 +1,297 @@
 // src/backtest/oneYearBacktest.ts
 
+import 'dotenv/config';
 import fs from 'fs';
 import path from 'path';
 import { EventEmitter } from 'events';
-import { fetchAllSymbols, fetchAllKlines, Candle, fetchLongShortRatio, fetchOpenInterest } from '../services/binanceService';
-import { calculateRSI } from '../utils/indicators';
+import {
+  fetchAllSymbols,
+  fetchAllKlines,
+  Candle
+} from '../services/binanceService';
+import {
+  calculateEMA,
+  calculateATR,
+  calculateRSI
+} from '../utils/indicators';
+import { TradeDetail } from '../models/tradeDetail';
 
-// Aumenta limite de listeners para evitar warnings
 EventEmitter.defaultMaxListeners = 20;
 
-// Detalhes de cada trade
-interface TradeDetail {
-  side: 'LONG' | 'SHORT';
-  entryTime: number;
-  entryDate: string;
-  entryPrice: number;
-  entryRsi: number;
-  entryLsRatio: number;
-  entryOi: number;       // open interest no momento da entrada
-  exitTime: number;
-  exitDate: string;
-  exitPrice: number;
-  exitRsi: number;
-  exitLsRatio: number;
-  exitOi: number;        // open interest no momento da saída
-  margin: number;
-  pnl: number;
-  pnlPercent: number;
+const RSI_LONG_MIN  = parseInt(process.env.RSI_LONG_MIN  || '40', 10);
+const RSI_LONG_MAX  = parseInt(process.env.RSI_LONG_MAX  || '70', 10);
+const RSI_SHORT_MIN = parseInt(process.env.RSI_SHORT_MIN || '30', 10);
+const RSI_SHORT_MAX = parseInt(process.env.RSI_SHORT_MAX || '60', 10);
+const TP_ATR_MULT   = parseFloat(process.env.TP_ATR_MULT || '1.5');
+
+interface BacktestResult {
+  timeframe: string;
+  startDate: string;
+  endDate: string;
+  totalTrades: number;
+  wins: number;
+  losses: number;
+  profit: number;
+  maxDrawdown: number;
+  trades: TradeDetail[];
 }
 
-async function runBacktest() {
-  const NUM_SYMBOLS  = parseInt(process.env.NUM_SYMBOLS || '1', 10);
-  const LEVERAGE     = Number(process.env.LEVERAGE    || '20');
-  const ENTRY_AMOUNT = Number(process.env.ENTRY_AMOUNT || '200');
-  const endTs        = Date.now();
-  const startTs      = endTs - 2 * 24 * 60 * 60 * 1000;
+export class OneYearBacktest {
+  private logPath: string;
 
-  const allInfo = await fetchAllSymbols().catch(() => []);
-  const symbols = allInfo.map(s => s.symbol).slice(0, NUM_SYMBOLS);
-
-  const results: { symbol: string; finalBalance: number; trades: TradeDetail[] }[] = [];
-
-  for (const symbol of ['AXSUSDT']) {
-    console.log(`🔄 Backtest para ${symbol}`);
-    let candles: Candle[];
-    try {
-      candles = await fetchAllKlines(symbol, '5m', startTs, endTs);
-    } catch {
-      console.warn(`⚠️ Falha ao carregar candles de ${symbol}`);
-      continue;
-    }
-
-    const closesAll = candles.map(c => c.close);
-    const oiAll: number[] = [];
-
-    let balance     = 1000;
-    let position: 'FLAT' | 'LONG' | 'SHORT' = 'FLAT';
-    let entryPrice = 0, entryRsi = 0, entryLsRatio = 0, entryOi = 0;
-    const tradeDetails: TradeDetail[] = [];
-
-    for (let i = 20; i < candles.length; i++) {
-      const slice = closesAll.slice(i - 20, i);
-      const rsi   = calculateRSI(slice);
-      const lsRatio = await fetchLongShortRatio(symbol, candles[i].openTime).catch(() => 0);
-      const oi    = await fetchOpenInterest(symbol, candles[i].openTime).catch(() => 0);
-      oiAll.push(oi);
-      const price = candles[i].close;
-
-      // calcula open interest médio dos últimos 20 candles
-      const avgOi = oiAll.slice(i - 20, i).reduce((a, b) => a + b, 0) / 20;
-
-      // abre LONG se confirma LSR e OI
-      if (position === 'FLAT' && lsRatio <= 1 && rsi > 30 && oi >= avgOi) {
-        entryPrice   = price;
-        entryRsi     = rsi;
-        entryLsRatio = lsRatio;
-        entryOi      = oi;
-        position     = 'LONG';
-        continue;
-      }
-
-      // fecha LONG
-      if (position === 'LONG' && (rsi > 70 || price < entryPrice * 0.98)) {
-        const exitPrice   = price;
-        const exitRsi     = rsi;
-        const exitLsRatio = lsRatio;
-        const exitOi      = oi;
-        const exitTime    = candles[i].openTime;
-        const entryTime   = candles[i - 1].openTime;
-
-        const capitalBefore = balance;
-        const margin        = ENTRY_AMOUNT > 0
-          ? Math.min(capitalBefore, ENTRY_AMOUNT)
-          : capitalBefore / LEVERAGE;
-        const profit        = (exitPrice - entryPrice) / entryPrice * margin * LEVERAGE;
-        const profitPercent = profit / capitalBefore * 100;
-        balance = capitalBefore + profit;
-
-        tradeDetails.push({
-          side: 'LONG',
-          entryTime,
-          entryDate: new Date(entryTime).toISOString(),
-          entryPrice,
-          entryRsi,
-          entryLsRatio,
-          entryOi,
-          exitTime,
-          exitDate: new Date(exitTime).toISOString(),
-          exitPrice,
-          exitRsi,
-          exitLsRatio,
-          exitOi,
-          margin,
-          pnl: profit,
-          pnlPercent: profitPercent
-        });
-
-        position = 'FLAT';
-        continue;
-      }
-
-      // abre SHORT se confirma LSR e OI
-      if (position === 'FLAT' && lsRatio > 1 && rsi < 70 && oi >= avgOi) {
-        entryPrice   = price;
-        entryRsi     = rsi;
-        entryLsRatio = lsRatio;
-        entryOi      = oi;
-        position     = 'SHORT';
-        continue;
-      }
-
-      // fecha SHORT
-      if (position === 'SHORT' && (rsi < 30 || price > entryPrice * 1.02)) {
-        const exitPrice   = price;
-        const exitRsi     = rsi;
-        const exitLsRatio = lsRatio;
-        const exitOi      = oi;
-        const exitTime    = candles[i].openTime;
-        const entryTime   = candles[i - 1].openTime;
-
-        const capitalBefore = balance;
-        const margin        = ENTRY_AMOUNT > 0
-          ? Math.min(capitalBefore, ENTRY_AMOUNT)
-          : capitalBefore / LEVERAGE;
-        const profit        = (entryPrice - exitPrice) / entryPrice * margin * LEVERAGE;
-        const profitPercent = profit / capitalBefore * 100;
-        balance = capitalBefore + profit;
-
-        tradeDetails.push({
-          side: 'SHORT',
-          entryTime,
-          entryDate: new Date(entryTime).toISOString(),
-          entryPrice,
-          entryRsi,
-          entryLsRatio,
-          entryOi,
-          exitTime,
-          exitDate: new Date(exitTime).toISOString(),
-          exitPrice,
-          exitRsi,
-          exitLsRatio,
-          exitOi,
-          margin,
-          pnl: profit,
-          pnlPercent: profitPercent
-        });
-
-        position = 'FLAT';
-      }
-    }
-
-    results.push({ symbol, finalBalance: balance, trades: tradeDetails });
-    console.log(`✅ ${symbol}: ${tradeDetails.length} trades, saldo final ${balance.toFixed(2)}`);
+  constructor() {
+    const dataDir = path.join(__dirname, '..', '..', 'data');
+    fs.mkdirSync(path.join(dataDir, 'logs'), { recursive: true });
+    this.logPath = path.join(dataDir, 'logs', 'backtest.log');
   }
 
-  // salvar resultados com timestamp
-  const runDate = new Date().toISOString().split('T')[0];
-  const baseData = path.join(__dirname, '..', '..', 'data');
-  const jsonName = `detailed-backtest-results-${runDate}.json`;
-  const jsonDir = path.join(baseData, 'json');
-  const jsonPath = path.join(jsonDir, jsonName);
-  fs.writeFileSync(jsonPath, JSON.stringify(results, null, 2));
+  public async run(): Promise<void> {
+    const SINGLE = process.env.SINGLE_TIMEFRAME || '15m';
+    const frames = SINGLE
+      ? [SINGLE]
+      : (process.env.TIMEFRAMES || '5m,15m,1h,4h,1d').split(',');
 
-  const mdName = `backtest-summary-${runDate}.md`;
-  const mdDir   = path.join(baseData, 'md');
-  const mdPath = path.join(mdDir, mdName);
-  const header = '| Symbol | Trades | Wins | Losses | Win Rate (%) | Total PnL | Avg PnL | Max Profit | Max Loss |';
-  const separator = '|---|---:|---:|---:|---:|---:|---:|---:|---:|';
-  const rowsMd = results.map(res => {
-    const count = res.trades.length;
-    const wins = res.trades.filter(t => t.pnl > 0).length;
-    const losses = count - wins;
-    const winRate = count ? (wins / count * 100).toFixed(2) : '0.00';
-    const totalPnl = res.trades.reduce((sum, t) => sum + t.pnl, 0).toFixed(2);
-    const avgPnl = count ? (res.trades.reduce((sum, t) => sum + t.pnl, 0) / count).toFixed(2) : '0.00';
-    const maxProf = count ? Math.max(...res.trades.map(t => t.pnl)).toFixed(2) : '0.00';
-    const maxLoss = count ? Math.min(...res.trades.map(t => t.pnl)).toFixed(2) : '0.00';
-    return `| ${res.symbol} | ${count} | ${wins} | ${losses} | ${winRate} | ${totalPnl} | ${avgPnl} | ${maxProf} | ${maxLoss} |`;
-  });
-  const mdContent = ['## Backtest Summary', '', header, separator, ...rowsMd].join('\n');
-  fs.writeFileSync(mdPath, mdContent);
+    const aggregated: BacktestResult[] = [];
+    for (const tf of frames) {
+      console.log(`\n🚀 Iniciando backtest para timeframe ${tf}`);
+      const start = Date.now();
+      const res   = await this.runBacktestFor(tf);
+      const took  = ((Date.now() - start) / 1000).toFixed(1);
+      console.log(`\n✅ Concluído ${tf} em ${took}s`);
+      console.log(`🔢 Trades: ${res.totalTrades} | ✅ ${res.wins} | ❌ ${res.losses} | 💰 $${res.profit.toFixed(2)}\n`);
 
-  console.log(`🎉 Backtest concluído!\n- JSON: ${jsonPath}\n- MD: ${mdPath}`);
+      this.saveDetailedJson(res);
+      this.saveMdSummary(res);
+      aggregated.push(res);
+    }
+
+    this.saveAggregatedResults(aggregated);
+    console.log('🏁 Todos os timeframes processados. Saindo.');
+  }
+
+  public async runBacktestFor(timeframe: string): Promise<BacktestResult> {
+    const NUM_SYMBOLS  = parseInt(process.env.NUM_SYMBOLS   || '15', 10);
+    const LEVERAGE     = Number(process.env.LEVERAGE        || '20');
+    const ENTRY_AMOUNT = Number(process.env.ENTRY_AMOUNT    || '200');
+    const RSI_PERIOD   = parseInt(process.env.RSI_PERIOD   || '14', 10);
+    const EMA_SHORT    = parseInt(process.env.EMA_SHORT    || '34', 10);
+    const EMA_LONG     = parseInt(process.env.EMA_LONG     || '72', 10);
+
+    let balance = 1000;
+    const endTs   = Date.now();
+    const startTs = endTs - 90 * 24 * 3600 * 1000;
+    const lookback = Math.max(EMA_LONG, RSI_PERIOD + 1);
+
+    const symbols = (await fetchAllSymbols()).map(s => s.symbol).slice(0, NUM_SYMBOLS);
+    const tradesAll: TradeDetail[] = [];
+
+    // processa em lotes de 3 símbolos para paralelismo simples
+    const BATCH_SIZE = 3;
+    for (let j = 0; j < symbols.length; j += BATCH_SIZE) {
+      const batch = symbols.slice(j, j + BATCH_SIZE);
+      const results = await Promise.all(
+        batch.map(sym =>
+          fetchAllKlines(sym, timeframe, startTs, endTs)
+            .then(candles => ({ symbol: sym, candles }))
+            .catch(() => ({ symbol: sym, candles: [] as Candle[] }))
+        )
+      );
+
+      for (const { symbol, candles } of results) {
+        console.log(`\n🕵️ Testando ${symbol} em ${timeframe}`);
+        if (candles.length < lookback) {
+          console.log(`⚠️  Candles insuficientes: ${candles.length} < ${lookback}`);
+          continue;
+        }
+
+        const closes = candles.map(c => c.close);
+        const highs  = candles.map(c => c.high);
+        const lows   = candles.map(c => c.low);
+
+        // pré-cálculo de indicadores
+        const emaShort = calculateEMA(closes, EMA_SHORT);
+        const emaLong  = calculateEMA(closes, EMA_LONG);
+
+        const atrArr: number[] = [];
+        for (let i = RSI_PERIOD; i < closes.length; i++) {
+          atrArr[i] = calculateATR(
+            highs.slice(i - RSI_PERIOD, i),
+            lows.slice(i - RSI_PERIOD, i),
+            closes.slice(i - RSI_PERIOD, i)
+          );
+        }
+
+        const rsiArr: number[] = [];
+        for (let i = RSI_PERIOD + 1; i < closes.length; i++) {
+          rsiArr[i] = calculateRSI(closes.slice(i - RSI_PERIOD - 1, i), RSI_PERIOD);
+        }
+
+        const state = {
+          position: 'FLAT' as 'FLAT' | 'LONG' | 'SHORT',
+          entryPrice: 0,
+          entryTime: 0,
+          takeProfit: 0
+        };
+
+        for (let i = lookback; i < candles.length; i++) {
+          const price = closes[i];
+          const time  = candles[i].openTime;
+          const prevS = emaShort[i - 1], prevL = emaLong[i - 1];
+          const currS = emaShort[i],     currL = emaLong[i];
+          const atr   = atrArr[i] || 0;
+          const rsi   = rsiArr[i] || 0;
+
+          // EMA crossover + filtro RSI
+          if (state.position === 'FLAT' && currS > currL && prevS <= prevL && rsi > 50) {
+            state.position   = 'LONG';
+            state.entryPrice = price;
+            state.entryTime  = time;
+            state.takeProfit = price + atr * TP_ATR_MULT;
+            const log = `🔄 [${symbol}] Entrada LONG @ ${new Date(time).toISOString()} (RSI=${rsi.toFixed(1)})`;
+            console.log(log);
+            fs.appendFileSync(this.logPath, log + '\n');
+            continue;
+          }
+          if (state.position === 'FLAT' && currS < currL && prevS >= prevL && rsi < 50) {
+            state.position   = 'SHORT';
+            state.entryPrice = price;
+            state.entryTime  = time;
+            state.takeProfit = price - atr * TP_ATR_MULT;
+            const log = `🔄 [${symbol}] Entrada SHORT @ ${new Date(time).toISOString()} (RSI=${rsi.toFixed(1)})`;
+            console.log(log);
+            fs.appendFileSync(this.logPath, log + '\n');
+            continue;
+          }
+
+          // saída ou TP LONG
+          if (state.position === 'LONG' && (currS < currL || price >= state.takeProfit)) {
+            const pnl = (price - state.entryPrice) / state.entryPrice * ENTRY_AMOUNT * LEVERAGE;
+            balance += pnl;
+            const log = [
+              `🔔 [${symbol}] Saída LONG @ ${new Date(time).toISOString()}`,
+              `  • Entry: ${state.entryPrice.toFixed(2)} Exit: ${price.toFixed(2)}`,
+              `  • PnL: ${pnl >= 0 ? '🟢 +' : '🔴 '}${pnl.toFixed(2)}`,
+              `  • Balance: ${balance.toFixed(2)}`
+            ].join('\n');
+            console.log(log, '\n');
+            fs.appendFileSync(this.logPath, log + '\n\n');
+            tradesAll.push({
+              side:       'LONG',
+              symbol,
+              entryTime:  state.entryTime,
+              exitTime:   time,
+              entryPrice: state.entryPrice,
+              exitPrice:  price,
+              pnl,
+              entryDate:  new Date(state.entryTime).toISOString(),
+              exitDate:   new Date(time).toISOString()
+            });
+            state.position = 'FLAT';
+            continue;
+          }
+
+          // saída ou TP SHORT
+          if (state.position === 'SHORT' && (currS > currL || price <= state.takeProfit)) {
+            const pnl = (state.entryPrice - price) / state.entryPrice * ENTRY_AMOUNT * LEVERAGE;
+            balance += pnl;
+            const log = [
+              `🔔 [${symbol}] Saída SHORT @ ${new Date(time).toISOString()}`,
+              `  • Entry: ${state.entryPrice.toFixed(2)} Exit: ${price.toFixed(2)}`,
+              `  • PnL: ${pnl >= 0 ? '🟢 +' : '🔴 '}${pnl.toFixed(2)}`,
+              `  • Balance: ${balance.toFixed(2)}`
+            ].join('\n');
+            console.log(log, '\n');
+            fs.appendFileSync(this.logPath, log + '\n\n');
+            tradesAll.push({
+              side:       'SHORT',
+              symbol,
+              entryTime:  state.entryTime,
+              exitTime:   time,
+              entryPrice: state.entryPrice,
+              exitPrice:  price,
+              pnl,
+              entryDate:  new Date(state.entryTime).toISOString(),
+              exitDate:   new Date(time).toISOString()
+            });
+            state.position = 'FLAT';
+            continue;
+          }
+
+          // regras antigas stub
+          console.log(
+            `   → [${symbol}] progresso: trades=${tradesAll.filter(t => t.symbol === symbol).length}, balance=${balance.toFixed(2)}`
+          );
+        }
+      }
+    }
+
+    // compila resultado
+    const totalTrades = tradesAll.length;
+    const wins        = tradesAll.filter(t => (t.pnl ?? 0) > 0).length;
+    const losses      = totalTrades - wins;
+    const profit      = tradesAll.reduce((sum, t) => sum + (t.pnl ?? 0), 0);
+
+    return {
+      timeframe,
+      startDate: new Date(startTs).toISOString().split('T')[0],
+      endDate:   new Date(endTs).toISOString().split('T')[0],
+      totalTrades,
+      wins,
+      losses,
+      profit,
+      maxDrawdown: 0,
+      trades: tradesAll
+    };
+  }
+
+  private saveDetailedJson(res: BacktestResult): void {
+    const file = path.join(__dirname, '..', '..', 'data', 'json',
+      `detailed-backtest-results-${res.endDate}.json`
+    );
+    fs.writeFileSync(file, JSON.stringify(res, null, 2));
+  }
+
+  private saveMdSummary(res: BacktestResult): void {
+    const stats: Record<string,{trades:number;wins:number;losses:number}> = {};
+    for (const t of res.trades) {
+      const sym = t.symbol!;
+      if (!stats[sym]) stats[sym] = { trades:0, wins:0, losses:0 };
+      stats[sym].trades++;
+      (t.pnl! > 0) ? stats[sym].wins++ : stats[sym].losses++;
+    }
+    const header = `# Backtest ${res.timeframe} (${res.endDate})\n\n`;
+    const tableHeader = `| Ativo | Trades | Wins | Losses |\n|:-----:|:------:|:----:|:------:|\n`;
+    const tableRows = Object.entries(stats)
+      .map(([sym,st]) => `| ${sym} | ${st.trades} | ${st.wins} | ${st.losses} |`)
+      .join('\n');
+    const footer = `
+
+**Resultado Geral**  
+- Total Trades: **${res.totalTrades}**  
+- Wins: **${res.wins}**  
+- Losses: **${res.losses}**  
+- Profit: **$${res.profit.toFixed(2)}**
+
+**Parâmetros de Saída**  
+- Stop Loss: ATR ×1  
+- Take Profit: ATR ×${TP_ATR_MULT}
+`;
+    const md = header + tableHeader + tableRows + footer;
+    const file = path.join(__dirname, '..', '..', 'data', 'md',
+      `backtest-summary-${res.endDate}.md`
+    );
+    fs.writeFileSync(file, md);
+  }
+
+  private saveAggregatedResults(all: BacktestResult[]): void {
+    const file = path.join(__dirname, '..', '..', 'data',
+      'detailed-backtest-results.json'
+    );
+    fs.writeFileSync(file, JSON.stringify(all, null, 2));
+  }
 }
 
-runBacktest().catch(err => {
-  console.error('❌ Erro no backtest:', err);
-  process.exit(1);
-});
+(async () => {
+  const backtester = new OneYearBacktest();
+  await backtester.run();
+})();

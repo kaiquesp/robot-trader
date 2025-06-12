@@ -138,3 +138,12 @@ dist
 .pnp.*
 
 **/data
+
+**/.wwebjs_auth
+**/.wwebjs_cache
+
+/src/**/*.js
+/src/**/*.js.map
+/dist
+
+    

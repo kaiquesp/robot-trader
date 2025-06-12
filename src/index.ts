@@ -8,6 +8,9 @@ import { OrderService as RawOrderService }       from './services/orderService';
 import { PositionService as RawPositionService } from './services/positionService';
 import { OpenPosition }                          from './services/positionService';
 import { Indicators } from './models/Indicators';
+import EventEmitter from 'events';
+
+EventEmitter.defaultMaxListeners = 20;
 
 (async () => {
   if (!process.env.BINANCE_API_KEY || !process.env.BINANCE_API_SECRET) {
@@ -67,5 +70,5 @@ import { Indicators } from './models/Indicators';
     } catch (err) {
       console.error('❌ Erro no bot:', err);
     }
-  }, 0.25 * 60 * 1000);
+  }, 5 * 60 * 1000);
 })();

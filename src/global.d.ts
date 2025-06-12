@@ -9,6 +9,12 @@ declare module '@binance/futures-connector' {
     reduceOnly?: boolean;
     timestamp: number;
     recvWindow?: number;
+    priceProtect: boolean;
+  }
+
+  // Parâmetros para cancelar todas as ordens abertas
+  interface CancelAllParams {
+    symbol: string;
   }
 
   // Parâmetros de filtro para getOpenOrders (se quiser filtrar por símbolo)
@@ -53,5 +59,17 @@ declare module '@binance/futures-connector' {
     getOpenOrders(params?: GetOpenOrdersParams): Promise<any>;
 
     getOpenPositions(): Promise<OpenPosition[]>
+
+    /** Cancela todas as ordens abertas (pode filtrar por symbol) */
+    cancelAllOpenOrders(params?: OrderFilterParams): Promise<any>;
+
+    /** (opcional) Se você precisar de cancelOrder individual */
+    cancelOrder(
+      symbol: string,
+      orderId: string,
+      params?: { timestamp: number; recvWindow?: number }
+    ): Promise<any>;
+
+    cancelAllOpenOrders(symbol: string): Promise<any>;
   }
 }

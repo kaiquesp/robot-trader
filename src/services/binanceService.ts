@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { BOT_TIMEFRAME } from '../configs/botConstants';
 
 const BASE_URL = process.env.TESTNET === 'true'
   ? 'https://testnet.binancefuture.com'
@@ -46,14 +47,16 @@ export async function fetchAllSymbols(): Promise<SymbolInfo[]> {
 }
 
 /**
- * Retorna o Long-Short Ratio (histórico ou live).
+ * Retorna o Long-Short Ratio (histórico ou live),
+ * com retry/backoff em 429 e fallback em 404.
+ * Agora busca sempre, inclusive no Testnet.
  */
 export async function fetchLongShortRatio(
   symbol: string,
   timestamp?: number
 ): Promise<number> {
   const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-  const url = `${BASE_URL}/futures/data/takerlongshortRatio`;
+  const url    = `https://fapi.binance.com/futures/data/takerlongshortRatio`;
   const params: any = { symbol, period: '1h', limit: 1 };
 
   if (timestamp != null && Date.now() - timestamp <= THIRTY_DAYS_MS) {
@@ -61,9 +64,29 @@ export async function fetchLongShortRatio(
     params.endTime   = timestamp;
   }
 
-  const res = await axios.get<{ buySellRatio: string }[]>(url, { params });
-  return res && res.data[0] && res.data[0].buySellRatio ? parseFloat(res.data[0].buySellRatio) : 0;
+  try {
+    const res = await axios.get<{ buySellRatio: string }[]>(url, { params });
+    const ratio = res.data[0]?.buySellRatio;
+    return ratio ? parseFloat(ratio) : 0;
+  } catch (err: any) {
+    if (axios.isAxiosError(err)) {
+      // Se 404, retorna 0 sem falhar
+      if (err.response?.status === 404) {
+        console.warn(`⚠️ fetchLongShortRatio 404 para ${symbol}, retornando 0`);
+        return 0;
+      }
+      // Se 429, espera e tenta novamente
+      if (err.response?.status === 429) {
+        const retryAfter = parseInt(err.response.headers['retry-after'] || '1', 10);
+        console.warn(`⚠️ 429 em fetchLongShortRatio para ${symbol}, retry-after=${retryAfter}s`);
+        await new Promise(r => setTimeout(r, (retryAfter + 1) * 1000));
+        return fetchLongShortRatio(symbol, timestamp);
+      }
+    }
+    throw err;
+  }
 }
+
 
 /**
  * Retorna a Funding Rate mais recente ou null.
@@ -71,7 +94,7 @@ export async function fetchLongShortRatio(
 export async function fetchFundingRate(symbol: string): Promise<number> {
   try {
     const resp = await axios.get(
-      `${BASE_URL}/fapi/v1/fundingRate`,
+      `https://fapi.binance.com/fapi/v1/fundingRate`,
       { params: { symbol, limit: 1 } }
     );
     const data = resp.data;
@@ -96,7 +119,7 @@ export async function fetchOpenInterest(
   if (timestamp != null && Date.now() - timestamp <= THIRTY_DAYS_MS) {
     try {
       const res = await axios.get<any[]>(
-        `${BASE_URL}/futures/data/openInterestHist`,
+        `https://fapi.binance.com/futures/data/openInterestHist`,
         { params: { symbol, period: '1h', startTime: timestamp, endTime: timestamp, limit: 1 } }
       );
       return parseFloat(res.data[0].sumOpenInterest);
@@ -107,7 +130,7 @@ export async function fetchOpenInterest(
 
   // live
   const live = await axios.get<{ openInterest: string }>(
-    `${BASE_URL}/fapi/v1/openInterest`,
+    `https://fapi.binance.com/fapi/v1/openInterest`,
     { params: { symbol } }
   );
   return parseFloat(live.data.openInterest);
@@ -122,14 +145,11 @@ export async function fetchKlines(
   startTime?: number,
   endTime?:   number
 ): Promise<any[]> {
-  const params: any = { symbol, interval };
+  const params: any = { symbol, interval: interval, limit: 1}
   if (startTime != null) params.startTime = startTime;
   if (endTime   != null) params.endTime   = endTime;
-  const res = await axios.get<any[]>(
-    `${BASE_URL}/fapi/v1/klines`,
-    { params }
-  );
-  return res.data;
+  
+  return fetchWith429Retry<any[]>(`${BASE_URL}/fapi/v1/klines`, params);
 }
 
 /**
@@ -147,7 +167,7 @@ export async function fetchAllKlines(
 
   while (cursor < endTime) {
     const slice = await axios
-      .get<any[]>(`${BASE_URL}/fapi/v1/klines`, { params: { symbol, interval, startTime: cursor, limit } })
+      .get<any[]>(`https://fapi.binance.com/fapi/v1/klines`, { params: { symbol, interval, startTime: cursor, limit } })
       .then(r => r.data);
     if (!slice.length) break;
 
@@ -160,4 +180,24 @@ export async function fetchAllKlines(
   }
 
   return all;
+}
+
+/** Faz GET e, se leve um 429, espera um pouquinho e tenta novamente */
+async function fetchWith429Retry<T = any>(
+  url: string,
+  params: Record<string, any>,
+  retries = 3,
+  backoffMs = 500
+): Promise<T> {
+  try {
+    const resp = await axios.get<T>(url, { params });
+    return resp.data;
+  } catch (err: any) {
+    if (err.response?.status === 429 && retries > 0) {
+      console.warn(`⚠️ 429 recebido, aguardando ${backoffMs}ms e retry...`);
+      await new Promise(r => setTimeout(r, backoffMs));
+      return fetchWith429Retry(url, params, retries - 1, backoffMs * 2);
+    }
+    throw err;
+  }
 }

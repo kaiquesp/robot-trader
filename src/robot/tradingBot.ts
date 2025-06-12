@@ -44,7 +44,8 @@ export async function runTradingBot() {
 
   // Adapter: ordens
   const orderService = {
-    placeOrder: (symbol: string, side: 'BUY' | 'SELL') => rawOrder.placeOrder(symbol, side)
+    placeOrder: (symbol: string, side: 'BUY' | 'SELL') => rawOrder.placeOrder(symbol, side),
+    getOpenPositions: () => rawPosition.getOpenPositions()
   };
 
   // Verifica credenciais
@@ -60,12 +61,18 @@ export async function runTradingBot() {
     positionManager
   );
 
-  // Loop do trading bot a cada 5 minutos
-  setInterval(async () => {
-    try {
-      await botController.run();
-    } catch (err) {
-      console.error("Erro no bot:", err);
+  // Loop principal sem memory leak
+  async function tradingLoop() {
+    while (true) {
+      try {
+        await botController.run();
+      } catch (err) {
+        console.error("Erro no bot:", err);
+      }
+      await new Promise(res => setTimeout(res, 5 * 60 * 1000));
     }
-  }, 5 * 60 * 1000);
+  }
+
+  // Inicia o loop principal
+  tradingLoop();
 }

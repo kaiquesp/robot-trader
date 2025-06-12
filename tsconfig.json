@@ -1,17 +1,15 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
+    // … suas outras opções …
+    "rootDir": "src",        // onde estão seus .ts
+    "outDir": "dist",        // onde quer os .js compilados
     "module": "commonjs",
-    "lib": [
-      "ES2020"
-    ],
+    "target": "es2020",
     "strict": true,
     "esModuleInterop": true,
-    "outDir": "dist",
     "skipLibCheck": true,
-    "sourceMap": true,
+    "sourceMap": true
   },
-  "include": [
-    "src"
-  ]
+  "include": ["src/**/*.ts"],     // só pega TS
+  "exclude": ["node_modules", "dist", "**/*.js"]  // exclui .js na src
 }

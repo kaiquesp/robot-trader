@@ -56,6 +56,10 @@ export class BotController {
           }
         }
       } else {
+        if(openPositions.length >= 7) {
+          console.warn(`Limite de ordens atingido ${symbol}`)
+          return;
+        }
         // regra de abertura
         if (ind.closes) {
           const action = this.positionManager.determineAction(symbol, ind as any);
