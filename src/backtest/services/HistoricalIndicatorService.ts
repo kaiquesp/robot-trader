@@ -2,7 +2,7 @@
 
 import { Indicators } from "../../models/Indicators";
 import { Candle, fetchLongShortRatio, fetchOpenInterest } from "../../services/binanceService";
-import { calculateRSI } from "../../utils/indicators";
+import { calculateEMA, calculateRSI } from "../../utils/indicators";
 
 /**
  * Serviço para retornar indicadores históricos baseados em velas carregadas.
@@ -26,10 +26,10 @@ export class HistoricalIndicatorService {
     const slice = this.candles.filter(c => c.openTime <= this.currentTime);
 
     // extrai arrays de velas
-    const opens   = slice.map(c => c.open);
-    const highs   = slice.map(c => c.high);
-    const lows    = slice.map(c => c.low);
-    const closes  = slice.map(c => c.close);
+    const opens = slice.map(c => c.open);
+    const highs = slice.map(c => c.high);
+    const lows = slice.map(c => c.low);
+    const closes = slice.map(c => c.close);
     const volumes = slice.map(c => c.volume);
 
     // calcula RSI (últimos 14 períodos)
@@ -37,7 +37,14 @@ export class HistoricalIndicatorService {
 
     // LS-Ratio e Open Interest históricos
     const lsr = await fetchLongShortRatio(symbol, this.currentTime) ?? 0;
-    const oi  = await fetchOpenInterest   (symbol, this.currentTime) ?? 0;
+    const oi = await fetchOpenInterest(symbol, this.currentTime) ?? 0;
+    const emaFast = calculateEMA(closes, 34);
+    const emaSlow = calculateEMA(closes, 72);
+    const emaFastCurr = emaFast[emaFast.length - 1] ?? 0;
+    const emaSlowCurr = emaSlow[emaSlow.length - 1] ?? 0;
+
+    const emaFastPrev = emaFast[emaFast.length - 2] ?? 0;
+    const emaSlowPrev = emaSlow[emaSlow.length - 2] ?? 0;
 
     // retorna todos os campos obrigatórios da interface Indicators
     return {
@@ -48,7 +55,11 @@ export class HistoricalIndicatorService {
       volumes,
       rsi,
       lsr,
-      oi
+      oi,
+      emaFast: emaFastCurr,
+      emaSlow: emaSlowCurr,
+      emaFastPrev,
+      emaSlowPrev
     };
   }
 }

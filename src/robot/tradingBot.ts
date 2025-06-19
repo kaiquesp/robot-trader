@@ -1,5 +1,6 @@
 // src/robot/runTradingBot.ts
 
+import { FileService } from "../services/fileService";
 import { IndicatorService } from "../services/indicatorsService";
 import { OrderService } from "../services/orderService";
 import { PositionService as LivePositionService } from "../services/positionService";
@@ -12,6 +13,7 @@ const BASE_URL = process.env.TESTNET === "true"
 
 /**
  * Executa o bot em ambiente live, adaptando serviços para BotController.
+ * Esta função executa UMA iteração do bot.
  */
 export async function runTradingBot() {
   const tradeAmount = 15;
@@ -33,7 +35,6 @@ export async function runTradingBot() {
       }
       return result;
     },
-    // live não usa setCurrentTime, mas BotController aceita opcional
     setCurrentTime: (ts: number) => {}
   };
 
@@ -45,8 +46,16 @@ export async function runTradingBot() {
   // Adapter: ordens
   const orderService = {
     placeOrder: (symbol: string, side: 'BUY' | 'SELL') => rawOrder.placeOrder(symbol, side),
-    getOpenPositions: () => rawPosition.getOpenPositions()
+    placeBracketOrder: (symbol: string, side: 'BUY' | 'SELL', tpPrice: number, slPrice: number) => rawOrder.placeBracketOrder(symbol, side, tpPrice, slPrice),
+    placeBracketOrderWithRetries: (symbol: string, side: 'BUY' | 'SELL', tpPrice: number, slPrice: number) => rawOrder.placeBracketOrderWithRetries(symbol, side, tpPrice, slPrice),
+    cancelOpenOrders: (symbol: string) => rawOrder.cancelOpenOrders(symbol),
+    getAccountBalance: () => rawOrder.getAccountBalance(),
+    getOpenPositions: () => rawPosition.getOpenPositions(),
+    getAllOpenOrders: (symbol?: string) => rawOrder.getAllOpenOrders(symbol),
+    getRealizedPnl: (sinceTs: number) => rawOrder.getRealizedPnl(sinceTs)
   };
+
+  const fileService = new FileService();
 
   // Verifica credenciais
   if (!process.env.BINANCE_API_KEY || !process.env.BINANCE_API_SECRET) {
@@ -58,21 +67,10 @@ export async function runTradingBot() {
     positionService,
     indicatorService,
     orderService,
-    positionManager
+    positionManager,
+    fileService 
   );
 
-  // Loop principal sem memory leak
-  async function tradingLoop() {
-    while (true) {
-      try {
-        await botController.run();
-      } catch (err) {
-        console.error("Erro no bot:", err);
-      }
-      await new Promise(res => setTimeout(res, 5 * 60 * 1000));
-    }
-  }
-
-  // Inicia o loop principal
-  tradingLoop();
+  // Executa apenas UMA iteração do bot
+  await botController.run();
 }

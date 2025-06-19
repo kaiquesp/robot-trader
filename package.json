@@ -6,7 +6,9 @@
     "build": "tsc",
     "start": "npx tsc && node dist/index.js",
     "build:start": "npm run build && npm run start",
-    "backtest": "ts-node src/backtest/oneYearBacktest.ts"
+    "backtest": "ts-node src/backtest/oneYearBacktest.ts",
+    "analyze": "ts-node src/scripts/analyzeTrades.ts",
+    "reset": "ts-node src/scripts/reset.ts"
   },
   "dependencies": {
     "@binance/futures-connector": "^0.1.7",

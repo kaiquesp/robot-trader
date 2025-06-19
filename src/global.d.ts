@@ -3,13 +3,15 @@
 declare module '@binance/futures-connector' {
   // Parâmetros aceitos pelo método newOrder
   interface NewOrderParams {
-    quantity: string;
-    price?: string;
+    quantity?: string;
+    price?: string;           // opcional
+    stopPrice?: string;       // opcional
     timeInForce?: string;
     reduceOnly?: boolean;
+    priceProtect?: boolean;   // opcional agora
     timestamp: number;
     recvWindow?: number;
-    priceProtect: boolean;
+    closePosition?: boolean; // para ordens de fechamento
   }
 
   // Parâmetros para cancelar todas as ordens abertas
@@ -45,7 +47,7 @@ declare module '@binance/futures-connector' {
     newOrder(
       symbol: string,
       side: 'BUY' | 'SELL',
-      type: 'MARKET' | 'LIMIT',
+      type: 'MARKET' | 'LIMIT' | 'STOP_MARKET' | 'TAKE_PROFIT_MARKET',
       params: NewOrderParams
     ): Promise<any>;
 
@@ -71,5 +73,7 @@ declare module '@binance/futures-connector' {
     ): Promise<any>;
 
     cancelAllOpenOrders(symbol: string): Promise<any>;
+
+    getAccountInformation(): Promise<any>;
   }
 }

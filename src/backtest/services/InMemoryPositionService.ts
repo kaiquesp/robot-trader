@@ -25,12 +25,13 @@ export class InMemoryPositionService {
   }
 
   /** Abre nova posição (invocado pelo OrderService) */
-  openPosition(symbol: string, side: 'BUY' | 'SELL', entryPrice: number): void {
+  openPosition(symbol: string, side: 'BUY' | 'SELL', entryPrice: number, positionAmt: number): void {
     this.positions.push({
       symbol,
       side,
       entryTime: this.currentTime,
       entryPrice,
+      positionAmt // quantidade fixa de 1 para simplificar
     });
   }
 

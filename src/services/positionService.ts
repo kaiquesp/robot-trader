@@ -9,6 +9,7 @@ export interface OpenPosition {
   side: 'BUY' | 'SELL';
   entryPrice: number;
   entryTime?: number;
+  positionAmt: number;
 }
 
 export class PositionService {
@@ -40,8 +41,7 @@ export class PositionService {
    */
   async getOpenPositions(): Promise<OpenPosition[]> {
     // 1) monta timestamp + recvWindow
-    const offset = await getTimeOffset();    // se não usar offset, remova esta linha
-    const timestamp = Date.now() + offset;
+    const timestamp = Date.now() + getTimeOffset();
     const recvWindow = 60_000;
 
     // 2) query string pra assinatura

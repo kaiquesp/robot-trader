@@ -3,16 +3,28 @@
 /**
  * Exponential Moving Average
  */
-export function calculateEMA(prices: number[], period: number): number[] {
+export function calculateEMA(data: number[], period: number): number[] {
   const k = 2 / (period + 1);
   const ema: number[] = [];
-  const initial = prices.slice(0, period).reduce((sum, p) => sum + p, 0) / period;
-  ema[period - 1] = initial;
-  for (let i = period; i < prices.length; i++) {
-    ema[i] = prices[i] * k + ema[i - 1] * (1 - k);
+  let prevEma: number | undefined;
+
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) {
+      ema.push(NaN);
+    } else if (i === period - 1) {
+      const sma = data.slice(0, period).reduce((a, b) => a + b, 0) / period;
+      prevEma = sma;
+      ema.push(sma);
+    } else {
+      const val = (data[i] - prevEma!) * k + prevEma!;
+      ema.push(val);
+      prevEma = val;
+    }
   }
+
   return ema;
 }
+
 
 // RSI de Wilder
 export function calculateRSI(closes: number[], period = 14): number {

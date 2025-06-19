@@ -10,6 +10,8 @@ export interface SymbolInfo {
   status: string;
   contractType: string;
   quoteAsset: string;
+  volume: string; // volume médio diário em USDT
+  lastPrice: string; // último preço
   // ... outros campos do exchangeInfo.symbols
 }
 
@@ -57,7 +59,7 @@ export async function fetchLongShortRatio(
 ): Promise<number> {
   const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
   const url    = `https://fapi.binance.com/futures/data/takerlongshortRatio`;
-  const params: any = { symbol, period: '1h', limit: 1 };
+  const params: any = { symbol, period: BOT_TIMEFRAME, limit: 1 };
 
   if (timestamp != null && Date.now() - timestamp <= THIRTY_DAYS_MS) {
     params.startTime = timestamp;
@@ -120,7 +122,7 @@ export async function fetchOpenInterest(
     try {
       const res = await axios.get<any[]>(
         `https://fapi.binance.com/futures/data/openInterestHist`,
-        { params: { symbol, period: '1h', startTime: timestamp, endTime: timestamp, limit: 1 } }
+        { params: { symbol, period: BOT_TIMEFRAME, startTime: timestamp, endTime: timestamp, limit: 1 } }
       );
       return parseFloat(res.data[0].sumOpenInterest);
     } catch {

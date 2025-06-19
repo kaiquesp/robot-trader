@@ -26,4 +26,8 @@ export interface Indicators {
   oi?: number;
   cvd?: number[];
   funding?: number;
+  emaFast: number;
+  emaSlow: number;
+  emaFastPrev: number;
+  emaSlowPrev: number;
 }
