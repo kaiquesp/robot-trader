@@ -1,15 +1,21 @@
 {
   "compilerOptions": {
-    // … suas outras opções …
-    "rootDir": "src",        // onde estão seus .ts
-    "outDir": "dist",        // onde quer os .js compilados
+    "rootDir": "src",
+    "outDir": "dist",
     "module": "commonjs",
     "target": "es2020",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "typeRoots": ["./src/types", "./node_modules/@types"]
   },
-  "include": ["src/**/*.ts"],     // só pega TS
-  "exclude": ["node_modules", "dist", "**/*.js"]  // exclui .js na src
+  "include": [
+    "src/**/*",
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.js"
+  ]
 }

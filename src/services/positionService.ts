@@ -2,7 +2,7 @@
 
 import axios from 'axios';
 import crypto from 'crypto';
-import { getTimeOffset } from '../utils/timeOffset';
+import { getTimeOffset } from './timeOffsetService';
 
 export interface OpenPosition {
   symbol: string;

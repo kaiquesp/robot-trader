@@ -1,4 +1,4 @@
-import { TradeDetail } from "./models/tradeDetail";
+import { TradeDetail } from "../models/tradeDetail";
 
 declare module 'qrcode-terminal';
 

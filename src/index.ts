@@ -1,11 +1,11 @@
 // src/index.ts
 import 'dotenv/config';
-import { syncTimeOffset } from './utils/timeOffset';
 import { BotController } from './robot/botController';
 import { PositionManager } from './robot/positionManager';
 import { indicatorService } from './services/indicatorsService';
 import { orderService } from './services/orderService';
 import { fileService } from './services/fileService';
+import { updateTimeOffset } from './services/timeOffsetService';
 
 // instancia o positionManager
 const positionManager = new PositionManager();
@@ -29,10 +29,10 @@ const orderServiceAdapter = {
 
 // função principal
 (async () => {
-  console.log(`\n🤖 Bot iniciado. Executando a cada 15 minutos...`);
+  console.log(`\n🤖 Bot iniciado. Executando a cada 5 minutos...`);
 
   // Garante que o clock está sincronizado
-  await syncTimeOffset();
+  await updateTimeOffset();
 
   // instancia o bot com os services necessários
   const bot = new BotController(
@@ -49,7 +49,7 @@ const orderServiceAdapter = {
   // executa a cada 15 minutos
   setInterval(async () => {
     try {
-      await syncTimeOffset();
+      await updateTimeOffset();
       await bot.run();
     } catch (err: any) {
       console.error('❌ Erro no ciclo do bot:', err?.response?.data?.msg || err?.message || err);

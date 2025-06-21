@@ -7,7 +7,7 @@ import "dotenv/config";
 import { OpenPosition } from "../robot/positionManager";
 import { fetchExchangeFilters, FullSymbolFilters } from "../utils/exchangeFilters";
 import { calculateQuantity, ceilQty } from "../utils/quantize";
-import { getTimeOffset } from "../utils/timeOffset";
+import { getTimeOffset } from "./timeOffsetService";
 import { BOT_TIMEFRAME } from "../configs/botConstants";
 import { fetchKlines } from "./binanceService";
 import { findRecentResistance, findRecentSupport } from "../utils/supportResistance";
@@ -37,87 +37,97 @@ export class OrderService {
    * @param slPrice Preço de stop-loss
    */
   async placeBracketOrder(
-    symbol: string,
-    side: "BUY" | "SELL",
-    tpPrice: number,
-    slPrice: number
-  ): Promise<void> {
-    // 1) busca filtros
-    const filters = (await fetchExchangeFilters())[symbol] as FullSymbolFilters;
-    if (!filters) return;
+  symbol: string,
+  side: "BUY" | "SELL",
+  tpPrice: number,
+  slPrice: number
+): Promise<void> {
+  // 1) busca filtros
+  const filters = (await fetchExchangeFilters())[symbol] as FullSymbolFilters;
+  if (!filters) return;
 
-    // 2) pega último close
-    let klines: any[];
-    try {
-      klines = await fetchKlines(symbol, BOT_TIMEFRAME);
-    } catch {
-      klines = [];
-    }
-    if (!klines.length) return;
-    const lastClose = parseFloat(klines[klines.length - 1][4]);
-
-    // 3) calcula qty
-    let quantity = calculateQuantity(this.tradeAmount, lastClose, filters.stepSize, side);
-    if (parseFloat(quantity) * lastClose < filters.minNotional) {
-      const rawMinQty = filters.minNotional / lastClose;
-      const minQtyNum = ceilQty(rawMinQty, filters.stepSize);
-      const prec = Math.round(-Math.log10(filters.stepSize));
-      quantity = minQtyNum.toFixed(prec);
-      console.warn(`⚠️ Ajuste p/ minNotional: qty=${quantity}`);
-    }
-
-    // 4) open MARKET
-    const timestamp = Date.now() + getTimeOffset();
-    const recvWindow = 60_000;
-    await this.client.newOrder(
-      symbol,
-      side,
-      "MARKET",
-      {
-        quantity,
-        timestamp,
-        recvWindow,
-        priceProtect: false
-      }
-    );
-    console.log(`✅ OPEN  ${side}  ${symbol} @ qty=${quantity}`);
-
-    // 5) direção oposta
-    const exitSide = side === "BUY" ? "SELL" : "BUY";
-
-    // 6) TAKE-PROFIT (LIMIT, reduceOnly)
-    // await this.client.newOrder(
-    //   symbol,
-    //   exitSide,
-    //   "LIMIT",
-    //   {
-    //     quantity,
-    //     price: tpPrice.toFixed(Math.round(-Math.log10(filters.tickSize))),
-    //     timeInForce: "GTC",
-    //     reduceOnly: true,
-    //     timestamp,
-    //     recvWindow,
-    //     priceProtect: false
-    //   }
-    // );
-    // console.log(`🎯 TP     ${exitSide}  ${symbol} @ price=${tpPrice}`);
-
-    // 7) STOP-LOSS (STOP_MARKET, reduceOnly) — precisa vir também o campo `price`
-    await this.client.newOrder(
-      symbol,
-      exitSide,
-      "STOP_MARKET",
-      {
-        quantity,
-        stopPrice: slPrice.toFixed(Math.round(-Math.log10(filters.tickSize))),
-        reduceOnly: true,
-        timestamp,
-        recvWindow,
-        priceProtect: false
-      }
-    );
-    console.log(`🛑 SL  ${exitSide} ${symbol} @ stopPrice=${slPrice}`);
+  // 2) pega último close
+  let klines: any[];
+  try {
+    klines = await fetchKlines(symbol, BOT_TIMEFRAME);
+  } catch {
+    klines = [];
   }
+  if (!klines.length) return;
+  const lastClose = parseFloat(klines[klines.length - 1][4]);
+
+  // 3) calcula qty
+  let quantity = calculateQuantity(this.tradeAmount, lastClose, filters.stepSize, side);
+
+  if (parseFloat(quantity) * lastClose < filters.minNotional) {
+    const rawMinQty = filters.minNotional / lastClose;
+    const minQtyNum = ceilQty(rawMinQty, filters.stepSize);
+    const prec = Math.round(-Math.log10(filters.stepSize));
+    quantity = minQtyNum.toFixed(prec);
+    console.warn(`⚠️ Ajuste p/ minNotional: qty=${quantity}`);
+  }
+
+  // NOVO: se ainda assim não atingir minNotional, não envia
+  if (parseFloat(quantity) * lastClose < filters.minNotional) {
+    console.warn(`❌ Ordem ${symbol} ignorada — qty=${quantity} não atinge minNotional ${filters.minNotional}`);
+    return;
+  }
+
+  // 4) open MARKET
+  const timestamp = Date.now() + getTimeOffset();
+  const recvWindow = 60_000;
+
+  await this.client.newOrder(
+    symbol,
+    side,
+    "MARKET",
+    {
+      quantity,
+      timestamp,
+      recvWindow,
+      priceProtect: false
+    }
+  );
+  console.log(`✅ OPEN  ${side}  ${symbol} @ qty=${quantity}`);
+
+  // 5) direção oposta
+  const exitSide = side === "BUY" ? "SELL" : "BUY";
+
+  // 6) TAKE-PROFIT (LIMIT, reduceOnly)
+  // await this.client.newOrder(
+  //   symbol,
+  //   exitSide,
+  //   "LIMIT",
+  //   {
+  //     quantity,
+  //     price: tpPrice.toFixed(Math.round(-Math.log10(filters.tickSize))),
+  //     timeInForce: "GTC",
+  //     reduceOnly: true,
+  //     timestamp,
+  //     recvWindow,
+  //     priceProtect: false
+  //   }
+  // );
+  // console.log(`🎯 TP     ${exitSide}  ${symbol} @ price=${tpPrice}`);
+
+  // 7) STOP-LOSS (STOP_MARKET, reduceOnly)
+  // await this.client.newOrder(
+  //   symbol,
+  //   exitSide,
+  //   "STOP_MARKET",
+  //   {
+  //     quantity,
+  //     stopPrice: slPrice.toFixed(Math.round(-Math.log10(filters.tickSize))),
+  //     reduceOnly: true,
+  //     timestamp,
+  //     recvWindow,
+  //     priceProtect: false
+  //   }
+  // );
+  // console.log(`🛑 SL  ${exitSide} ${symbol} @ stopPrice=${slPrice}`);
+}
+
+
 
   async cancelOpenOrders(symbol: string): Promise<void> {
     try {
@@ -281,7 +291,7 @@ export class OrderService {
     for (const pos of positions) {
       const side = pos.side === "BUY" ? "SELL" : "BUY";
       const qty = Math.abs(pos.positionAmt).toString();
-      const timestamp = Date.now();
+      const timestamp = Date.now() + getTimeOffset();
       const recvWindow = 60_000;
 
       // Cancelar todas as ordens abertas
@@ -423,23 +433,18 @@ export class OrderService {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         console.log(`🎯 Tentativa ${attempt}/3 para abrir ordem em ${symbol}`);
-
         await this.placeBracketOrder(symbol, side, tpPrice, slPrice);
 
         console.log(`✅ Ordem aberta em ${symbol} na tentativa ${attempt}`);
         return; // sucesso → sai
-
       } catch (err: any) {
         console.error(`❌ Erro ao abrir ordem em ${symbol} tentativa ${attempt}:`, err?.response?.data?.msg || err?.message);
 
         if (attempt === 3) {
           console.warn(`⚠️ 3 tentativas falharam para ${symbol}. Fechando posição a mercado!`);
-
           const oppositeSide = side === 'BUY' ? 'SELL' : 'BUY';
-
           // Força fechamento imediato da posição
           await this.placeOrder(symbol, oppositeSide);
-
           console.log(`🚨 Posição ${side} em ${symbol} foi forçada a fechar após falhas.`);
         } else {
           // Espera um pouco antes de tentar de novo
@@ -458,7 +463,7 @@ export class OrderService {
     const apiKey = process.env.BINANCE_API_KEY || '';
     const apiSecret = process.env.BINANCE_API_SECRET || '';
 
-    const timestamp = Date.now();
+    const timestamp = Date.now() + getTimeOffset();
     const query = `timestamp=${timestamp}`;
     const signature = crypto
       .createHmac('sha256', apiSecret)

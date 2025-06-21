@@ -1,5 +1,6 @@
 import axios from 'axios';
 import crypto from 'crypto';
+import { getTimeOffset } from './timeOffsetService';
 
 export async function countTP_SL(
   symbol: string,
@@ -12,7 +13,7 @@ export async function countTP_SL(
   const apiKey = process.env.BINANCE_API_KEY || '';
   const apiSecret = process.env.BINANCE_API_SECRET || '';
 
-  const timestamp = Date.now();
+  const timestamp = Date.now() + getTimeOffset();
 
   const queryString = `symbol=${symbol}&startTime=${sinceTs}&timestamp=${timestamp}`;
   const signature = crypto

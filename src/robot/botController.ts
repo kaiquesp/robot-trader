@@ -32,10 +32,12 @@ export class BotController {
   ) { }
 
   async run() {
-    console.log(`\n🚀 Iniciando ciclo do bot...`);
-
+    
     // const cycleStartTs = Date.now();
-
+    const hoursBack = 24;
+    const sinceTs = Date.now() - hoursBack * 3600 * 1000;
+    
+    console.log(`\n🚀 Iniciando ciclo do bot... as ${new Date(sinceTs).toISOString()} `);
     let tpCount = 0;
     let slCount = 0;
 
@@ -82,7 +84,7 @@ export class BotController {
             : existing.entryPrice + atr * SL_ATR_MULT;
 
           // Agora passa o stopLoss para o método
-          if (this.positionManager.shouldClosePosition(existing, ind, stopLoss)) {
+          if (this.positionManager.shouldClosePosition(symbol, existing, ind)) {
             const side = existing.side === 'BUY' ? 'SELL' : 'BUY';
             await this.orderService.placeOrder(symbol, side);
             console.log(`✅ Fechando ${existing.side} em ${symbol}`);
@@ -127,13 +129,15 @@ export class BotController {
             console.log(`♻️ Posições atualizadas após fechamento. Agora: ${openPositions.length}`);
 
             const balanceInfo = await this.orderService.getAccountBalance();
-            const balance = balanceInfo.availableBalance;
+            const balance = balanceInfo.totalWalletBalance;
+            const availableBalance = balanceInfo.availableBalance
 
             const logMsg = [
               `🔔 [${symbol}] Saída ${existing.side} @ ${new Date().toISOString()}`,
               `  • Entry: ${existing.entryPrice.toFixed(2)} Exit: ${lastPrice.toFixed(2)}`,
               `  • PnL: ${isTP ? '🟢 +' : '🔴 '}${(pnlDollar).toFixed(2)}`,
-              `  • Balance: ${balance.toFixed(2)}`
+              `  • Balance: ${balance.toFixed(2)}`,
+              `  • Available: ${availableBalance.toFixed(2)}`,
             ].join('\n');
 
             console.log(logMsg);
@@ -222,49 +226,51 @@ export class BotController {
       }
     }
 
-    // ============================
-    // VERIFICA POSIÇÕES ORFÃS e ORDENS ORFÃS
-    // ============================
+    // // ============================
+    // // VERIFICA POSIÇÕES ORFÃS e ORDENS ORFÃS
+    // // ============================
 
-    console.log('\n🧹 Verificando consistência de ordens e posições...');
+    // console.log('\n🧹 Verificando consistência de ordens e posições...');
 
-    const positionsNow = await this.positionService.getOpenPositions();
-    const openOrdersNow = await this.orderService.getAllOpenOrders();
+    // const positionsNow = await this.positionService.getOpenPositions();
+    // const openOrdersNow = await this.orderService.getAllOpenOrders();
 
-    for (const pos of positionsNow) {
-      const ordersForSymbol = openOrdersNow.filter(o => o.symbol === pos.symbol);
+    // for (const pos of positionsNow) {
+    //   const ordersForSymbol = openOrdersNow.filter(o => o.symbol === pos.symbol);
 
-      if (ordersForSymbol.length === 0) {
-        console.warn(`⚠️ Posição em ${pos.symbol} sem ordens! Fechando imediatamente.`);
+    //   if (ordersForSymbol.length === 0) {
+    //     console.warn(`⚠️ Posição em ${pos.symbol} sem ordens! Fechando imediatamente.`);
 
-        const side = pos.side === 'BUY' ? 'SELL' : 'BUY';
-        await this.orderService.placeOrder(pos.symbol, side);
+    //     const side = pos.side === 'BUY' ? 'SELL' : 'BUY';
+    //     await this.orderService.placeOrder(pos.symbol, side);
 
-        console.log(`🚨 Posição ${pos.side} em ${pos.symbol} foi fechada (sem ordens).`);
-      }
-    }
+    //     console.log(`🚨 Posição ${pos.side} em ${pos.symbol} foi fechada (sem ordens).`);
+    //   }
+    // }
 
-    for (const order of openOrdersNow) {
-      const stillOpenPosition = positionsNow.find(p => p.symbol === order.symbol);
+    // for (const order of openOrdersNow) {
+    //   const stillOpenPosition = positionsNow.find(p => p.symbol === order.symbol);
 
-      if (!stillOpenPosition) {
-        console.warn(`⚠️ Ordem pendente em ${order.symbol} mas sem posição. Cancelando...`);
+    //   if (!stillOpenPosition) {
+    //     console.warn(`⚠️ Ordem pendente em ${order.symbol} mas sem posição. Cancelando...`);
 
-        await this.orderService.cancelOpenOrders(order.symbol);
+    //     await this.orderService.cancelOpenOrders(order.symbol);
 
-        console.log(`🗑️ Ordens de ${order.symbol} canceladas (sem posição).`);
-      }
-    }
+    //     console.log(`🗑️ Ordens de ${order.symbol} canceladas (sem posição).`);
+    //   }
+    // }
 
     // ============================
     // PNL REALIZADO + CONTAGEM TP/SL via API
     // ============================
 
-    const hoursBack = 24;
-    const sinceTs = Date.now() - hoursBack * 3600 * 1000;
+    
     const realizedPnl = await this.orderService.getRealizedPnl(sinceTs);
     const balanceInfo = await this.orderService.getAccountBalance();
-    const balance = balanceInfo.availableBalance;
+    const balance = balanceInfo.totalWalletBalance;
+    const positionsNow = await this.positionService.getOpenPositions();
+    const openOrdersNow = await this.orderService.getAllOpenOrders();
+    const availableBalance = balanceInfo.availableBalance
 
     let totalTP = 0;
     let totalSL = 0;
@@ -283,7 +289,8 @@ export class BotController {
       `🏁 Fim do ciclo. Total posições abertas: ${positionsNow.length}`,
       `💰 PnL realizado ${new Date(sinceTs).toISOString()} no ciclo: ${realizedPnl >= 0 ? '🟢' : '🔴'} ${realizedPnl.toFixed(2)} USDT`,
       `🎯 TP: ${totalTP} (${tpPct.toFixed(1)}%)  🛑 SL: ${totalSL} (${slPct.toFixed(1)}%)`,
-      `💰 Balance: ${balance})`,
+      `💰 Balance: ${balance.toFixed(2)}})`,
+      `  • Available: ${availableBalance.toFixed(2)}`,
       '---------------------------------------\n'
     ].join('\n');
 
