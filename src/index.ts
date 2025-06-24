@@ -24,13 +24,13 @@ const positionManager = new PositionManager()
 
 // Adapter para o orderService — métodos que o BotController espera
 const orderServiceAdapter = {
+  getKlines: orderService.getKlines,
   placeOrder: orderService.placeOrder,
   placeCloseOrder: orderService.placeCloseOrder,
   placeBracketOrder: orderService.placeBracketOrder,
   placeBracketOrderWithRetries: orderService.placeBracketOrderWithRetries,
   cancelOpenOrders: orderService.cancelOpenOrders,
   getAccountBalance: orderService.getAccountBalance,
-  getOpenPositions: orderService.getOpenPositions,
   getAllOpenOrders: orderService.getAllOpenOrders,
   getRealizedPnl: orderService.getRealizedPnl,
 }

@@ -1,4 +1,5 @@
 export interface OrderServiceAdapter {
+    getKlines: (symbol) => Promise<any[]>;
     initializeWebSockets: (symbols: string[]) => Promise<void>; // <--- adiciona isso aqui
     placeOrder: (symbol: string, side: "BUY" | "SELL") => Promise<void>;
     placeCloseOrder: (symbol: string, side: "BUY" | "SELL", qty: string) => Promise<void>;

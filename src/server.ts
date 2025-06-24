@@ -42,6 +42,7 @@ const orderServiceAdapter: OrderServiceAdapter = {
   getRealizedPnl: orderService.getRealizedPnl,
   cleanup: orderService.cleanup,
   getCurrentPrice: orderService.getCurrentPrice,
+  getKlines: orderService.getKlines,
 };
 
 const botEngine = new BotEngine(

@@ -46,6 +46,7 @@ export class BotEngine {
             { getOpenPositions: () => this.positionService.getOpenPositions() },
             this.indicatorService,
             {
+                getKlines: this.orderService.getKlines,
                 placeOrder: this.orderService.placeOrder,
                 placeCloseOrder: this.orderService.placeCloseOrder,
                 placeBracketOrder: this.orderService.placeBracketOrder,

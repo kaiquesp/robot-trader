@@ -1,7 +1,7 @@
 import type { Indicators } from "../models/Indicators"
 import type { OpenPosition } from "./positionManager"
 import type { PositionManager } from "./positionManager"
-import { calculateATR } from "../utils/indicators"
+import { calculateATR, calculateRSI } from "../utils/indicators"
 import type { FileService } from "../services/fileService"
 import { AxiosError } from "axios"
 import { countTP_SL } from "../services/tradeStatsService"
@@ -24,6 +24,7 @@ export class BotController {
       setCurrentTime?(ts: number): void
     },
     private orderService: {
+      getKlines(symbol: string): Promise<any[]>
       placeOrder(symbol: string, side: "BUY" | "SELL"): Promise<void>
       placeCloseOrder(symbol: string, side: "BUY" | "SELL", qty: string): Promise<void>
       placeBracketOrder(symbol: string, side: "BUY" | "SELL", tpPrice: number, slPrice: number): Promise<void>
@@ -124,15 +125,33 @@ export class BotController {
 
         // Use cached position check first
         const existing = await this.getPositionSafe(symbol)
-        const ind = await this.indicatorService.fetchIndicators(symbol)
+        // 🔥 Usa getKlines otimizado via WebSocket/cache
+        const klines = await this.orderService.getKlines(symbol);
 
-        if (!ind.closes || !ind.highs || !ind.lows) {
-          console.warn(`⚠️ Indicadores incompletos para ${symbol}, pulando...`)
-          continue
+        if (!klines || klines.length === 0) {
+          console.warn(`⚠️ Klines vazios para ${symbol}, pulando...`);
+          continue;
         }
 
-        const { closes, highs, lows } = ind
-        const n = closes.length - 1
+        const closes = klines.map(k => parseFloat(k[4]));
+        const highs = klines.map(k => parseFloat(k[2]));
+        const lows = klines.map(k => parseFloat(k[3]));
+
+        const n = closes.length - 1;
+
+        // Calcula indicadores com suas funções
+        const rsiPeriod = parseInt(process.env.RSI_PERIOD || "14", 10);
+        const atrPeriod = parseInt(process.env.ATR_PERIOD || "14", 10);
+
+        if (closes.length < Math.max(rsiPeriod, atrPeriod)) {
+          console.warn(`⚠️ Dados insuficientes para calcular indicadores em ${symbol}`);
+          continue;
+        }
+
+        const rsi = calculateRSI(closes.slice(-rsiPeriod));
+        const atr = calculateATR(highs.slice(-atrPeriod), lows.slice(-atrPeriod), closes.slice(-atrPeriod));
+
+        console.log(`ℹ️ Indicadores ${symbol}: RSI=${rsi.toFixed(2)} ATR=${atr.toFixed(2)}`);
 
         // 📉 FECHAMENTO
         if (existing) {
@@ -154,7 +173,19 @@ export class BotController {
             existing.side === "BUY" ? existing.entryPrice - atr * SL_ATR_MULT : existing.entryPrice + atr * SL_ATR_MULT
 
           // Agora passa o stopLoss para o método
-          const mapIndicatorsToContext = this.positionManager.mapIndicatorsToContext(ind)
+          const ind = {
+            closes,
+            highs,
+            lows,
+            rsi,
+            atr,
+            emaFast: 0,
+            emaSlow: 0,
+            emaFastPrev: 0,
+            emaSlowPrev: 0
+          };
+
+          const mapIndicatorsToContext = this.positionManager.mapIndicatorsToContext(ind);
           if (this.positionManager.shouldClosePosition(symbol, existing, mapIndicatorsToContext)) {
             const side = existing.side === "BUY" ? "SELL" : "BUY"
             const qty = Math.abs(existing.positionAmt).toFixed(6)
@@ -286,7 +317,8 @@ export class BotController {
           // Clear position cache for this symbol to force fresh data next time
           this.clearPositionCache(symbol)
 
-          const entryLog = `🔄 [${symbol}] Entrada ${action} @ ${new Date().toISOString()} (RSI=${ind.rsi?.toFixed(1)})`
+          // --- CORREÇÃO AQUI ---
+          const entryLog = `🔄 [${symbol}] Entrada ${action} @ ${new Date().toISOString()} (RSI=${rsi?.toFixed(1)})`
 
           console.log(entryLog)
           this.appendTradeLog(entryLog)
