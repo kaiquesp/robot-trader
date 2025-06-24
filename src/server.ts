@@ -17,6 +17,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 const WS_REALTIME_LOG_PORT = 3001;
 const WS_FILE_LOG_PORT = 3002;
+const WS_POSITIONS_PORT = 3003;
 
 app.use(bodyParser.json());
 
@@ -151,7 +152,6 @@ wsFileLogServer.on('connection', (ws) => {
   console.log('🔗 Cliente conectado em /logs-file');
   fileLogClients.add(ws);
 
-  // Ao conectar, envia as últimas 100 linhas do arquivo
   const logPath = path.join(__dirname, '../logs/trades.log');
   fs.readFile(logPath, 'utf-8', (err, data) => {
     if (!err) {
@@ -170,9 +170,7 @@ wsFileLogServer.on('connection', (ws) => {
   });
 });
 
-// --- Watch file logs/trades.log e envia updates ---
 const tradesLogPath = path.join(__dirname, '../logs/trades.log');
-let fileLogLastSize = 0;
 
 fs.watchFile(tradesLogPath, { interval: 1000 }, (curr, prev) => {
   if (curr.size > prev.size) {
@@ -204,9 +202,76 @@ fs.watchFile(tradesLogPath, { interval: 1000 }, (curr, prev) => {
   }
 });
 
+// --- WebSocket Server 3: Positions & PnL Stats ---
+const wsPositionsServer = new WebSocketServer({ port: WS_POSITIONS_PORT });
+const positionsClients = new Set<any>();
+
+wsPositionsServer.on('connection', async (ws) => {
+  console.log('🔗 Cliente conectado em /positions-stats');
+  positionsClients.add(ws);
+
+  ws.on('close', () => {
+    console.log('❌ Cliente desconectado de /positions-stats');
+    positionsClients.delete(ws);
+  });
+
+  const interval = setInterval(async () => {
+    try {
+      const positions = await orderService.getOpenPositions();
+      const now = Date.now();
+
+      let totalPnl = 0;
+
+      const positionsData = positions.map(pos => {
+        const currentPrice = orderService.getCurrentPrice(pos.symbol);
+        const pnl = pos.side === 'BUY'
+          ? (currentPrice - pos.entryPrice) * pos.positionAmt
+          : (pos.entryPrice - currentPrice) * Math.abs(pos.positionAmt);
+
+        totalPnl += pnl;
+
+        return {
+          symbol: pos.symbol,
+          side: pos.side,
+          entryPrice: pos.entryPrice,
+          positionAmt: pos.positionAmt,
+          currentPrice,
+          pnl
+        };
+      });
+
+      const startOfDay = new Date();
+      startOfDay.setUTCHours(0, 0, 0, 0);
+      const realizedPnl = await orderService.getRealizedPnl(startOfDay.getTime());
+
+      const payload = JSON.stringify({
+        type: 'positions-stats',
+        timestamp: new Date().toISOString(),
+        totalOpenPositions: positions.length,
+        positions: positionsData,
+        totalPnl: totalPnl,
+        realizedPnlToday: realizedPnl
+      });
+
+      for (const client of positionsClients) {
+        if (client.readyState === 1) {
+          client.send(payload);
+        }
+      }
+    } catch (err) {
+      console.error('❌ Erro ao enviar positions-stats:', err?.message || err);
+    }
+  }, 5000);
+
+  ws.on('close', () => {
+    clearInterval(interval);
+  });
+});
+
 // --- Inicializa REST API
 app.listen(port, () => {
   console.log(`✅ API REST do Bot rodando em http://localhost:${port}`);
   console.log(`✅ WS /logs-realtime: ws://localhost:${WS_REALTIME_LOG_PORT}`);
   console.log(`✅ WS /logs-file: ws://localhost:${WS_FILE_LOG_PORT}`);
+  console.log(`✅ WS /positions-stats: ws://localhost:${WS_POSITIONS_PORT}`);
 });
