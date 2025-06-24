@@ -76,7 +76,8 @@ async function runBacktest() {
       const price = closes[i];
       const time = candles[i].openTime;
       const rsiWindow = closes.slice(i - (lbRSI + 1), i);
-      const rsi = calculateRSI(rsiWindow, lbRSI);
+      const rsiArr = calculateRSI(rsiWindow, lbRSI);
+      const rsi = Array.isArray(rsiArr) ? rsiArr[rsiArr.length - 1] : rsiArr;
       const { macd, signal } = calculateMACD(closes.slice(i - lbMACD, i));
       const vwap = calculateVWAP(highs.slice(i - lbVWAP, i), lows.slice(i - lbVWAP, i), closes.slice(i - lbVWAP, i), vols.slice(i - lbVWAP, i));
       const atr = calculateATR(highs.slice(i - lbRSI, i), lows.slice(i - lbRSI, i), closes.slice(i - lbRSI, i));
