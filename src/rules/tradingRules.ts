@@ -40,9 +40,9 @@ const ruleSets: Record<TradingRule, RuleFunction[]> = {
     (ctx) => {
       const crossedUp = ctx.emaFast > ctx.emaSlow && ctx.emaFastPrev <= ctx.emaSlowPrev;
       const distanceToSupportPct = ((ctx.price - ctx.support) / ctx.price) * 100;
-      const thresholdPct = 0.5; // % — pode parametrizar se quiser
+      const thresholdPct = 1; // % — pode parametrizar se quiser
 
-      if (crossedUp && ctx.trend === 'UP' && distanceToSupportPct <= thresholdPct) {
+       if (crossedUp && ctx.trend === 'UP' && distanceToSupportPct <= thresholdPct) {
         console.log(`📈 Crossover UP + perto do suporte (${distanceToSupportPct.toFixed(2)}%) → BUY`);
         return 'BUY';
       }
@@ -51,7 +51,7 @@ const ruleSets: Record<TradingRule, RuleFunction[]> = {
     (ctx) => {
       const crossedDown = ctx.emaFast < ctx.emaSlow && ctx.emaFastPrev >= ctx.emaSlowPrev;
       const distanceToResistancePct = ((ctx.resistance - ctx.price) / ctx.price) * 100;
-      const thresholdPct = 0.5; // % — pode parametrizar se quiser
+      const thresholdPct = 1; // % — pode parametrizar se quiser
 
       if (crossedDown && ctx.trend === 'DOWN' && distanceToResistancePct <= thresholdPct) {
         console.log(`📉 Crossover DOWN + perto da resistência (${distanceToResistancePct.toFixed(2)}%) → SELL`);

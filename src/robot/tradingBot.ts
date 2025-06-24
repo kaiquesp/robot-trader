@@ -46,13 +46,15 @@ export async function runTradingBot() {
   // Adapter: ordens
   const orderService = {
     placeOrder: (symbol: string, side: 'BUY' | 'SELL') => rawOrder.placeOrder(symbol, side),
+    placeCloseOrder: (symbol: string, side: 'BUY' | 'SELL', qtd: string) => rawOrder.placeCloseOrder(symbol, side, qtd),
     placeBracketOrder: (symbol: string, side: 'BUY' | 'SELL', tpPrice: number, slPrice: number) => rawOrder.placeBracketOrder(symbol, side, tpPrice, slPrice),
     placeBracketOrderWithRetries: (symbol: string, side: 'BUY' | 'SELL', tpPrice: number, slPrice: number) => rawOrder.placeBracketOrderWithRetries(symbol, side, tpPrice, slPrice),
     cancelOpenOrders: (symbol: string) => rawOrder.cancelOpenOrders(symbol),
     getAccountBalance: () => rawOrder.getAccountBalance(),
     getOpenPositions: () => rawPosition.getOpenPositions(),
     getAllOpenOrders: (symbol?: string) => rawOrder.getAllOpenOrders(symbol),
-    getRealizedPnl: (sinceTs: number) => rawOrder.getRealizedPnl(sinceTs)
+    getRealizedPnl: (sinceTs: number) => rawOrder.getRealizedPnl(sinceTs),
+    startPositionStream: () => rawOrder.startPositionStream(),
   };
 
   const fileService = new FileService();
@@ -70,7 +72,5 @@ export async function runTradingBot() {
     positionManager,
     fileService 
   );
-
-  // Executa apenas UMA iteração do bot
   await botController.run();
 }

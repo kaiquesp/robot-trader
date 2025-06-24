@@ -1,4 +1,4 @@
-// src/utils/timeOffsetService.ts
+// src/service/timeOffsetService.ts
 
 import axios from 'axios';
 

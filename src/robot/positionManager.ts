@@ -78,42 +78,37 @@ export class PositionManager {
     };
   }
 
-  shouldClosePosition(symbol: string, pos: OpenPosition, ind: Indicators): boolean {
-    const { closes } = ind;
-    if (!closes || closes.length < EMA_LONG + 2) return false;
+  shouldClosePosition(symbol: string, pos: OpenPosition, ctx: Context): boolean {
+    const crossedDown = ctx.emaFast < ctx.emaSlow && ctx.emaFastPrev >= ctx.emaSlowPrev;
+    const crossedUp = ctx.emaFast > ctx.emaSlow && ctx.emaFastPrev <= ctx.emaSlowPrev;
 
-    const emaShort = calculateEMA(closes, EMA_SHORT);
-    const emaLong = calculateEMA(closes, EMA_LONG);
+    const distanceToSupportPct = ((ctx.price - ctx.support) / ctx.price) * 100;
+    const distanceToResistancePct = ((ctx.resistance - ctx.price) / ctx.price) * 100;
+    const thresholdPct = 1; // %
 
-    const n = closes.length - 1;
-
-    // Usamos os candles fechados (n-1 e n-2)
-    const prevShort = emaShort[n - 2];
-    const prevLong = emaLong[n - 2];
-    const currShort = emaShort[n - 1];
-    const currLong = emaLong[n - 1];
-
-    const emaDiffPct = Math.abs(currShort - currLong) / currLong;
-    const crossedDown = currShort < currLong && prevShort >= prevLong;
-    const crossedUp = currShort > currLong && prevShort <= prevLong;
-    const minDiffPct = 0; // 0.2%
+    const minDeltaPct = 0.1; // % distância mínima entre EMAs após cruzamento (histerese)
+    const deltaPct = Math.abs(ctx.emaFast - ctx.emaSlow) / ctx.price * 100;
 
     if (pos.side === 'BUY') {
-      if (crossedDown && emaDiffPct > minDiffPct) {
-        console.log(`🟥 Symbol: ${symbol} Fechando BUY: crossedDown=${crossedDown}, emaDiffPct=${(emaDiffPct * 100).toFixed(2)}%`);
+      if (crossedDown && ctx.trend === 'DOWN' && distanceToResistancePct <= thresholdPct && deltaPct >= minDeltaPct) {
+        console.log(
+          `✅ [${symbol}] Fechando BUY → Crossover DOWN + resistência perto (${distanceToResistancePct.toFixed(2)}%) + delta ${deltaPct.toFixed(2)}%`
+        );
         return true;
       }
-    } else {
-      if (crossedUp && emaDiffPct > minDiffPct) {
-        console.log(`🟦 Symbol: ${symbol} Fechando SELL: crossedUp=${crossedUp}, emaDiffPct=${(emaDiffPct * 100).toFixed(2)}%`);
+    }
+    else if (pos.side === 'SELL') {
+      if (crossedUp && ctx.trend === 'UP' && distanceToSupportPct <= thresholdPct && deltaPct >= minDeltaPct) {
+        console.log(
+          `✅ [${symbol}] Fechando SELL → Crossover UP + suporte perto (${distanceToSupportPct.toFixed(2)}%) + delta ${deltaPct.toFixed(2)}%`
+        );
         return true;
       }
     }
 
-    console.log(`🟩 Symbol: ${symbol} Mantendo posição: side=${pos.side}, emaDiffPct=${(emaDiffPct * 100).toFixed(2)}%`);
+    console.log(`➡️  [${symbol}] Mantendo posição ${pos.side} — delta EMA: ${deltaPct.toFixed(2)}%`);
     return false;
   }
-
 }
 
 function fetchVolume(symbol: string): number | PromiseLike<number> {

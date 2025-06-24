@@ -74,7 +74,7 @@ export class IndicatorService {
       };
     }
 
-    const klines = raw.slice(-250);
+    const klines = raw.slice(-251, -1);
 
     const opens = klines.map(k => k.open);
     const highs = klines.map(k => k.high);
