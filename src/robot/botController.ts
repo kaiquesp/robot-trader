@@ -148,10 +148,7 @@ export class BotController {
           continue;
         }
 
-        const rsi = calculateRSI(closes.slice(-rsiPeriod));
-        const atr = calculateATR(highs.slice(-atrPeriod), lows.slice(-atrPeriod), closes.slice(-atrPeriod));
-
-        console.log(`ℹ️ Indicadores ${symbol}: RSI=${rsi.toFixed(2)} ATR=${atr.toFixed(2)}`);
+        const rsi = calculateRSI(closes, rsiPeriod); // <- Use o array inteiro!
 
         // 📉 FECHAMENTO
         if (existing) {
@@ -177,7 +174,7 @@ export class BotController {
             closes,
             highs,
             lows,
-            rsi,
+            rsi: Array.isArray(rsi) ? (rsi.length ? rsi[rsi.length - 1] : 50) : rsi, // <-- Corrigido!
             atr,
             emaFast: 0,
             emaSlow: 0,
@@ -318,7 +315,7 @@ export class BotController {
           this.clearPositionCache(symbol)
 
           // --- CORREÇÃO AQUI ---
-          const entryLog = `🔄 [${symbol}] Entrada ${action} @ ${new Date().toISOString()} (RSI=${rsi?.toFixed(1)})`
+          const entryLog = `🔄 [${symbol}] Entrada ${action} @ ${new Date().toISOString()} (RSI=${rsi})`
 
           console.log(entryLog)
           this.appendTradeLog(entryLog)

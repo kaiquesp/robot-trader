@@ -49,7 +49,7 @@ export class IndicatorService {
         lows: empty,
         closes: empty,
         volumes: empty,
-        rsi: 50,
+        rsi: 50,   // valor neutro se não houver dados suficientes
         macd: 0,
         signal: 0,
         histogram: 0,
@@ -82,7 +82,10 @@ export class IndicatorService {
     const closes = klines.map(k => k.close);
     const volumes = klines.map(k => k.volume);
 
-    const rsi = calculateRSI(closes);
+    // RSI agora retorna array, pegamos apenas o último valor (número) para manter compatibilidade!
+    const rsiArr = calculateRSI(closes);
+    const rsi = rsiArr.length ? rsiArr[rsiArr.length - 1] : 50;
+
     const { macd, signal, histogram } = calculateMACD(closes);
     const bollinger = calculateBollingerBands(closes);
     const { support, resistance } = calculateSupportResistance(closes);

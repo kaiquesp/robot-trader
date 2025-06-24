@@ -47,8 +47,16 @@ export class PositionManager {
   mapIndicatorsToContext(ind: Indicators): Context {
     const n = ind.closes?.length ? ind.closes.length - 1 : 0;
 
+    // Corrigido: pega o último valor do array do RSI, se existir
+    const latestRsi =
+      Array.isArray(ind.rsi) && ind.rsi.length > 0
+        ? ind.rsi[ind.rsi.length - 1]
+        : typeof ind.rsi === "number"
+          ? ind.rsi
+          : 50; // fallback neutro
+
     return {
-      rsi: ind.rsi ?? 0,
+      rsi: latestRsi,
       macd: ind.macd ?? 0,
       volume: ind.volumes?.[n] ?? 0,
       trend: ind.emaTrend === 'up' ? 'UP' :
@@ -74,7 +82,7 @@ export class PositionManager {
       emaSlow: ind.emaSlow ?? 0,
       emaFastPrev: ind.emaFastPrev ?? 0,
       emaSlowPrev: ind.emaSlowPrev ?? 0,
-      lastPrices: ind.closes?.slice(-20) ?? []  // <<< ESTE CAMPO é o que precisa estar aqui!
+      lastPrices: ind.closes?.slice(-20) ?? []
     };
   }
 

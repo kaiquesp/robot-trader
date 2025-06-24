@@ -5,7 +5,7 @@ import { TradingRule } from "../enum/tradingRule";
 type Action = 'BUY' | 'SELL' | 'HOLD';
 
 type Context = {
-  rsi: number;
+  rsi: number; // AGORA é apenas o valor mais recente!
   macd: number;
   volume: number;
   trend: 'UP' | 'DOWN' | 'SIDEWAYS';
@@ -42,7 +42,7 @@ const ruleSets: Record<TradingRule, RuleFunction[]> = {
       const distanceToSupportPct = ((ctx.price - ctx.support) / ctx.price) * 100;
       const thresholdPct = 1; // % — pode parametrizar se quiser
 
-       if (crossedUp && ctx.trend === 'UP' && distanceToSupportPct <= thresholdPct) {
+      if (crossedUp && ctx.trend === 'UP' && distanceToSupportPct <= thresholdPct) {
         console.log(`📈 Crossover UP + perto do suporte (${distanceToSupportPct.toFixed(2)}%) → BUY`);
         return 'BUY';
       }
