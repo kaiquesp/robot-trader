@@ -326,7 +326,7 @@ export class BotController {
           this.clearPositionCache(symbol)
 
           // --- CORREÇÃO AQUI ---
-          const entryLog = `🔄 [${symbol}] Entrada ${action} @ ${new Date().toISOString()} (RSI=${rsi})`
+          const entryLog = `🔄 [${symbol}] Entrada ${action} @ ${new Date().toISOString()}`
 
           console.log(entryLog)
           this.appendTradeLog(entryLog)
@@ -363,20 +363,20 @@ export class BotController {
     const positionsNow = await this.positionService.getOpenPositions()
     const openOrdersNow = await this.orderService.getAllOpenOrders()
 
-    for (const pos of positionsNow) {
-      const ordersForSymbol = openOrdersNow.filter((o) => o.symbol === pos.symbol)
+    // for (const pos of positionsNow) {
+    //   const ordersForSymbol = openOrdersNow.filter((o) => o.symbol === pos.symbol)
 
-      if (ordersForSymbol.length === 0) {
-        console.warn(`⚠️ Posição em ${pos.symbol} sem ordens! Fechando imediatamente.`)
+    //   if (ordersForSymbol.length === 0) {
+    //     console.warn(`⚠️ Posição em ${pos.symbol} sem ordens! Fechando imediatamente.`)
 
-        const side = pos.side === "BUY" ? "SELL" : "BUY"
-        const qty = Math.abs(pos.positionAmt).toFixed(6)
-        await this.orderService.placeCloseOrder(pos.symbol, side, qty)
+    //     const side = pos.side === "BUY" ? "SELL" : "BUY"
+    //     const qty = Math.abs(pos.positionAmt).toFixed(6)
+    //     await this.orderService.placeCloseOrder(pos.symbol, side, qty)
 
-        console.log(`🚨 Posição ${pos.side} em ${pos.symbol} foi fechada (sem ordens).`)
-        this.clearPositionCache(pos.symbol)
-      }
-    }
+    //     console.log(`🚨 Posição ${pos.side} em ${pos.symbol} foi fechada (sem ordens).`)
+    //     this.clearPositionCache(pos.symbol)
+    //   }
+    // }
 
     for (const order of openOrdersNow) {
       const stillOpenPosition = positionsNow.find((p) => p.symbol === order.symbol)

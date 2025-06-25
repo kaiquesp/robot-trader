@@ -10,7 +10,7 @@
     "multiTimeframeBacktest": "ts-node src/backtest/multiTimeframeBacktest.ts",
     "analyze": "ts-node src/scripts/analyzeTrades.ts",
     "reset": "ts-node src/scripts/reset.ts",
-    "start:api": "ts-node src/server.ts"
+    "start:api": "npx tsc && node dist/server.js"
   },
   "dependencies": {
     "@binance/futures-connector": "^0.1.7",
