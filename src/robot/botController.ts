@@ -270,10 +270,21 @@ export class BotController {
         console.log(`🔒 Bloqueando ${symbol} para processamento...`)
 
         try {
-          // VERIFICAÇÃO FINAL antes de abrir (double-check após lock)
-          const finalCheck = await this.canOpenPosition(symbol)
-          if (!finalCheck.canOpen) {
-            console.log(`⚠️ ${symbol} falhou na verificação final: ${finalCheck.reason}`)
+          // VERIFICAÇÃO FINAL antes de abrir (double-check após lock, IGNORANDO o lock)
+          const finalPosition = await this.getPositionSafe(symbol, true)
+          if (finalPosition) {
+            console.log(`⚠️ ${symbol} já existe uma posição após o lock, pulando...`)
+            continue
+          }
+          const existingOrders = await this.orderService.getAllOpenOrders(symbol)
+          if (existingOrders.length > 0) {
+            console.log(`⚠️ ${symbol} tem ordens pendentes após o lock, pulando...`)
+            continue
+          }
+          const allPositions = await this.positionService.getOpenPositions()
+          const maxPositions = 7
+          if (allPositions.length >= maxPositions) {
+            console.log(`⚠️ Limite de posições atingido após o lock, pulando ${symbol}...`)
             continue
           }
 
