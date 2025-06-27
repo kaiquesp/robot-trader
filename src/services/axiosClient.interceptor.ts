@@ -26,7 +26,7 @@ axiosClient.interceptors.response.use((response) => {
 //   console.log('Data:', response.data);
   return response;
 }, (error) => {
-  console.error('[Response Error]', error.response?.status, error.response?.data);
+  console.error(`[Response Error] ${error.response}`, error.response?.status, error.response?.data);
   return Promise.reject(error);
 });
 

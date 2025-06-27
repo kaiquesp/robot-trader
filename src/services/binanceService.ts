@@ -39,14 +39,31 @@ function intervalToMs(interval: string): number {
 /** Busca todos os símbolos (exchangeInfo) */
 export async function fetchAllSymbols(): Promise<SymbolInfo[]> {
   try {
-    const resp = await axios.get<{ symbols: SymbolInfo[] }>(
+    const resp = await axios.get<{ symbols: any[] }>(
       `${BASE_URL}/fapi/v1/exchangeInfo`
     );
-    return resp.data.symbols;
-  } catch {
+    // Filtra só contratos PERPETUAL, USDT, com symbol definido (proteção extra)
+    return resp.data.symbols
+      .filter(s =>
+        typeof s.symbol === "string" &&
+        s.symbol.endsWith("USDT") &&
+        s.status === "TRADING" &&
+        (s.contractType === "PERPETUAL" || !s.contractType) // Testnet pode vir sem esse campo
+      )
+      .map(s => ({
+        symbol: s.symbol,
+        status: s.status,
+        contractType: s.contractType || "",
+        quoteAsset: s.quoteAsset || "",
+        volume: s.volume || "0",
+        lastPrice: s.lastPrice || "0"
+      }));
+  } catch (e) {
+    console.error("❌ Erro em fetchAllSymbols:", e?.message || e);
     return [];
   }
 }
+
 
 /**
  * Retorna o Long-Short Ratio (histórico ou live),

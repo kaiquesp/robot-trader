@@ -83,7 +83,7 @@ async function initializeBot(): Promise<BotController> {
 
     console.log(`✅ WebSockets inicializados:`)
     console.log(`   📈 Posições: ${positions.length}`)
-    console.log(`   💰 Saldo: $${balance.availableBalance?.toFixed(2) || "0.00"}`)
+    console.log(`   💰 Saldo: $${balance.totalWalletBalance?.toFixed(2) || "0.00"}`)
 
     // 6. Instancia o bot
     const botInstance = new BotController(

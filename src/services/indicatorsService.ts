@@ -29,6 +29,8 @@ function intervalToMs(interval: string): number {
   }
 }
 
+const DEFAULT_RSI = 50;
+
 export class IndicatorService {
   /**
    * Busca e retorna indicadores para timeframe configurado. Nunca retorna null.
@@ -76,15 +78,16 @@ export class IndicatorService {
 
     const klines = raw.slice(-251, -1);
 
-    const opens = klines.map(k => k.open);
-    const highs = klines.map(k => k.high);
-    const lows = klines.map(k => k.low);
-    const closes = klines.map(k => k.close);
-    const volumes = klines.map(k => k.volume);
+    // Certifique-se de converter para number caso venha string
+    const opens = klines.map(k => +k.open);
+    const highs = klines.map(k => +k.high);
+    const lows = klines.map(k => +k.low);
+    const closes = klines.map(k => +k.close);
+    const volumes = klines.map(k => +k.volume);
 
-    // RSI agora retorna array, pegamos apenas o último valor (número) para manter compatibilidade!
+    // O RSI normalmente retorna array; pegue só o último valor
     const rsiArr = calculateRSI(closes);
-    const rsi = rsiArr.length ? rsiArr[rsiArr.length - 1] : 50;
+    const rsi = Array.isArray(rsiArr) ? (rsiArr.length ? rsiArr[rsiArr.length - 1] : DEFAULT_RSI) : DEFAULT_RSI;
 
     const { macd, signal, histogram } = calculateMACD(closes);
     const bollinger = calculateBollingerBands(closes);
@@ -107,9 +110,11 @@ export class IndicatorService {
     const emaFastPrev = emaFastArray[emaFastArray.length - 2] ?? 0;
     const emaSlowPrev = emaSlowArray[emaSlowArray.length - 2] ?? 0;
 
-    const lsr = await fetchLongShortRatio(symbol) ?? 0;
-    const oi = await fetchOpenInterest(symbol) ?? 0;
-    const funding = await fetchFundingRate(symbol) ?? 0;
+    // LSR, OI, Funding: proteja o fetch
+    let lsr = 0, oi = 0, funding = 0;
+    try { lsr = await fetchLongShortRatio(symbol) ?? 0; } catch (err) { console.warn(`[LSR] ${symbol}:`, err); }
+    try { oi = await fetchOpenInterest(symbol) ?? 0; } catch (err) { console.warn(`[OI] ${symbol}:`, err); }
+    try { funding = await fetchFundingRate(symbol) ?? 0; } catch (err) { console.warn(`[Funding] ${symbol}:`, err); }
 
     return {
       opens,

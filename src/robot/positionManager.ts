@@ -27,7 +27,11 @@ export class PositionManager {
         .filter(s =>
           s.status === 'TRADING' &&
           s.quoteAsset === 'USDT' &&
-          (!s.contractType || s.contractType === 'PERPETUAL')
+          (!s.contractType || s.contractType === 'PERPETUAL') &&
+          !!s.symbol && typeof s.symbol === 'string' &&
+          s.symbol !== 'undefined' &&
+          s.symbol.trim() !== '' &&
+          /[A-Z0-9]+USDT$/.test(s.symbol)
         )
         .map(s => s.symbol);
     } catch (error: any) {
@@ -37,6 +41,10 @@ export class PositionManager {
   }
 
   async processSymbol(symbol: string, ruleSet: TradingRule) {
+    if (!symbol || typeof symbol !== 'string' || symbol === 'undefined' || symbol.trim() === '') {
+      throw new Error(`Símbolo inválido em processSymbol: ${symbol}`);
+    }
+
     const indicators = await indicatorService.fetchIndicators(symbol);
     const context = this.mapIndicatorsToContext(indicators);
     const action = determineAction(ruleSet, context);
@@ -97,8 +105,13 @@ export class PositionManager {
     const minDeltaPct = 0.1; // % distância mínima entre EMAs após cruzamento (histerese)
     const deltaPct = Math.abs(ctx.emaFast - ctx.emaSlow) / ctx.price * 100;
 
+    if (!ctx.price) {
+      console.warn(`[${symbol}] Preço zero ou inválido em shouldClosePosition, pulando...`);
+      return false;
+    }
+
     if (pos.side === 'BUY') {
-      if (crossedDown && ctx.trend === 'DOWN' && distanceToResistancePct <= thresholdPct && deltaPct >= minDeltaPct) {
+      if (crossedDown && ctx.trend === 'DOWN' && deltaPct >= minDeltaPct) {
         console.log(
           `✅ [${symbol}] Fechando BUY → Crossover DOWN + resistência perto (${distanceToResistancePct.toFixed(2)}%) + delta ${deltaPct.toFixed(2)}%`
         );
@@ -106,7 +119,7 @@ export class PositionManager {
       }
     }
     else if (pos.side === 'SELL') {
-      if (crossedUp && ctx.trend === 'UP' && distanceToSupportPct <= thresholdPct && deltaPct >= minDeltaPct) {
+      if (crossedUp && ctx.trend === 'UP' && deltaPct >= minDeltaPct) {
         console.log(
           `✅ [${symbol}] Fechando SELL → Crossover UP + suporte perto (${distanceToSupportPct.toFixed(2)}%) + delta ${deltaPct.toFixed(2)}%`
         );

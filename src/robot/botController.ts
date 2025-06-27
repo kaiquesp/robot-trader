@@ -116,6 +116,11 @@ export class BotController {
     const openedThisCycle = new Set<string>()
 
     for (const symbol of symbols) {
+      if (!symbol || typeof symbol !== 'string' || symbol === 'undefined') {
+        console.warn('⚠️ Symbol inválido na lista de símbolos, pulando:', symbol)
+        continue
+      }
+
       try {
         // Verificar se já está sendo processado globalmente
         if (BotController.processingSymbols.has(symbol)) {
@@ -363,32 +368,43 @@ export class BotController {
     const positionsNow = await this.positionService.getOpenPositions()
     const openOrdersNow = await this.orderService.getAllOpenOrders()
 
-    // for (const pos of positionsNow) {
-    //   const ordersForSymbol = openOrdersNow.filter((o) => o.symbol === pos.symbol)
+    // if (positionsNow && positionsNow.length) {
+    //   for (const pos of positionsNow) {
+    //     const ordersForSymbol = openOrdersNow.filter((o) => o.symbol === pos.symbol)
 
-    //   if (ordersForSymbol.length === 0) {
-    //     console.warn(`⚠️ Posição em ${pos.symbol} sem ordens! Fechando imediatamente.`)
+    //     if (ordersForSymbol.length === 0) {
+    //       console.warn(`⚠️ Posição em ${pos.symbol} sem ordens! Fechando imediatamente.`)
 
-    //     const side = pos.side === "BUY" ? "SELL" : "BUY"
-    //     const qty = Math.abs(pos.positionAmt).toFixed(6)
-    //     await this.orderService.placeCloseOrder(pos.symbol, side, qty)
+    //       const side = pos.side === "BUY" ? "SELL" : "BUY"
+    //       const qty = Math.abs(pos.positionAmt).toFixed(6)
+    //       await this.orderService.placeCloseOrder(pos.symbol, side, qty)
 
-    //     console.log(`🚨 Posição ${pos.side} em ${pos.symbol} foi fechada (sem ordens).`)
-    //     this.clearPositionCache(pos.symbol)
+    //       console.log(`🚨 Posição ${pos.side} em ${pos.symbol} foi fechada (sem ordens).`)
+    //       this.clearPositionCache(pos.symbol)
+    //     }
     //   }
+    // } else {
+    //   console.warn(`positionsNow está vazio ${positionsNow}`)
     // }
 
-    for (const order of openOrdersNow) {
-      const stillOpenPosition = positionsNow.find((p) => p.symbol === order.symbol)
 
-      if (!stillOpenPosition) {
-        console.warn(`⚠️ Ordem pendente em ${order.symbol} mas sem posição. Cancelando...`)
+    if (openOrdersNow && openOrdersNow.length) {
+      for (const order of openOrdersNow) {
+        if (!order.symbol || typeof order.symbol !== 'string' || order.symbol === 'undefined') {
+          console.warn('⚠️ Ordem com symbol inválido no openOrdersNow:', order)
+          continue
+        }
 
-        await this.orderService.cancelOpenOrders(order.symbol)
-
-        console.log(`🗑️ Ordens de ${order.symbol} canceladas (sem posição).`)
+        const stillOpenPosition = positionsNow.find((p) => p.symbol === order.symbol)
+        if (!stillOpenPosition) {
+          console.warn(`⚠️ Ordem pendente em ${order.symbol} mas sem posição. Cancelando...`)
+          await this.orderService.cancelOpenOrders(order.symbol)
+        }
       }
+    } else {
+      console.warn(`openOrdersNow está vazio ${openOrdersNow}`)
     }
+
 
     // ============================
     // PNL REALIZADO + CONTAGEM TP/SL via API
@@ -404,6 +420,11 @@ export class BotController {
     let totalSL = 0
 
     for (const symbol of symbols) {
+      if (!symbol || typeof symbol !== 'string' || symbol === 'undefined') {
+        console.warn('⚠️ Symbol inválido na lista de símbolos, pulando:', symbol)
+        continue
+      }
+
       const { tpCount: tps, slCount: sls } = await countTP_SL(symbol, sinceTs)
       totalTP += tps
       totalSL += sls
@@ -431,8 +452,12 @@ export class BotController {
   private appendTradeLog(message: string) {
     const fs = require("fs")
     const logPath = path.join(__dirname, "../logs/trades.log")
-
-    fs.mkdirSync(path.dirname(logPath), { recursive: true })
-    fs.appendFileSync(logPath, message + "\n")
+    console.log("Log path:", logPath); // <-- ADICIONE ISSO!
+    try {
+      fs.mkdirSync(path.dirname(logPath), { recursive: true });
+      fs.appendFileSync(logPath, message + "\n");
+    } catch (err) {
+      console.error("Erro ao salvar log:", err, "Log path:", logPath);
+    }
   }
 }

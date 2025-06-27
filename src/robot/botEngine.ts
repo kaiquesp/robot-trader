@@ -40,7 +40,7 @@ export class BotEngine {
 
         console.log(`✅ WebSockets inicializados:`);
         console.log(`   📈 Posições: ${positions.length}`);
-        console.log(`   💰 Saldo: $${balance.availableBalance?.toFixed(2) || "0.00"}`);
+        console.log(`   💰 Saldo: $${balance.totalWalletBalance?.toFixed(2) || "0.00"}`);
 
         this.bot = new BotController(
             { getOpenPositions: () => this.positionService.getOpenPositions() },

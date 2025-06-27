@@ -49,12 +49,12 @@ export class OrderService {
   private marketDataWs: WebSocket | null = null
   private reconnectAttempts = 0
   private maxReconnectAttempts = 5
-  
+
   // 🔥 CONTROLE DE INTERVALOS E TIMEOUTS
   private listenKeyInterval: NodeJS.Timeout | null = null
   private userDataReconnectTimeout: NodeJS.Timeout | null = null
   private marketDataReconnectTimeout: NodeJS.Timeout | null = null
-  
+
   // 🔥 CONTROLE DE ESTADO
   private isInitialized = false
   private isDestroyed = false
@@ -80,8 +80,13 @@ export class OrderService {
     }
 
     console.log("🚀 Inicializando WebSockets otimizados...")
-    
-    this.currentSymbols = [...symbols]
+
+    // 🔒 FILTRAR SÍMBOLOS INVÁLIDOS ANTES DE USAR!
+    const validSymbols = symbols.filter(
+      s => !!s && typeof s === 'string' && s !== 'undefined' && s.trim() !== ''
+    )
+
+    this.currentSymbols = [...validSymbols] // sempre filtrada
     this.isInitialized = true
 
     try {
@@ -89,7 +94,7 @@ export class OrderService {
       await this.startUserDataStream()
 
       // 2. WebSocket para dados de mercado
-      await this.startMarketDataStream(symbols)
+      await this.startMarketDataStream(validSymbols)
 
       // 3. Sync inicial apenas para posições e saldo
       await this.initialSyncUserData()
@@ -102,6 +107,7 @@ export class OrderService {
       throw error
     }
   }
+
 
   // 🔄 USER DATA STREAM - CORRIGIDO PARA EVITAR VAZAMENTOS
   private async startUserDataStream(): Promise<void> {
@@ -117,7 +123,7 @@ export class OrderService {
       const listenKey = listenKeyResp.data.listenKey
 
       this.userDataWs = new WebSocket(`${WS_BASE_URL}/ws/${listenKey}`)
-      
+
       // 🔥 AUMENTA LIMITE DE LISTENERS SE NECESSÁRIO
       this.userDataWs.setMaxListeners(20)
 
@@ -166,7 +172,7 @@ export class OrderService {
 
     this.listenKeyInterval = setInterval(async () => {
       if (this.isDestroyed) return
-      
+
       try {
         await axiosClient.put(`${BASE_URL}/fapi/v1/listenKey`, null, {
           headers: { "X-MBX-APIKEY": process.env.BINANCE_API_KEY },
@@ -192,7 +198,7 @@ export class OrderService {
       const streamUrl = `${WS_BASE_URL}/stream?streams=${allStreams.join("/")}`
 
       this.marketDataWs = new WebSocket(streamUrl)
-      
+
       // 🔥 AUMENTA LIMITE DE LISTENERS SE NECESSÁRIO
       this.marketDataWs.setMaxListeners(20)
 
@@ -233,11 +239,11 @@ export class OrderService {
     if (this.userDataWs) {
       // Remove todos os listeners antes de fechar
       this.userDataWs.removeAllListeners()
-      
+
       if (this.userDataWs.readyState === WebSocket.OPEN) {
         this.userDataWs.close(1000, "Cleanup")
       }
-      
+
       this.userDataWs = null
     }
 
@@ -253,11 +259,11 @@ export class OrderService {
     if (this.marketDataWs) {
       // Remove todos os listeners antes de fechar
       this.marketDataWs.removeAllListeners()
-      
+
       if (this.marketDataWs.readyState === WebSocket.OPEN) {
         this.marketDataWs.close(1000, "Cleanup")
       }
-      
+
       this.marketDataWs = null
     }
 
@@ -271,7 +277,7 @@ export class OrderService {
   // 🔄 RECONEXÃO CONTROLADA PARA USER DATA
   private scheduleUserDataReconnect(): void {
     if (this.isDestroyed) return
-    
+
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       console.error("❌ Máximo de tentativas de reconexão atingido para User Data")
       return
@@ -287,9 +293,9 @@ export class OrderService {
 
     this.userDataReconnectTimeout = setTimeout(async () => {
       if (this.isDestroyed) return
-      
+
       console.log(`🔄 Tentativa ${this.reconnectAttempts}/${this.maxReconnectAttempts} - Reconectando User Data...`)
-      
+
       try {
         await this.startUserDataStream()
       } catch (error) {
@@ -310,9 +316,9 @@ export class OrderService {
 
     this.marketDataReconnectTimeout = setTimeout(async () => {
       if (this.isDestroyed) return
-      
+
       console.log("🔄 Reconectando Market Data...")
-      
+
       try {
         await this.startMarketDataStream(this.currentSymbols)
       } catch (error) {
@@ -390,6 +396,11 @@ export class OrderService {
 
     const streamData = data.data
     const symbol = streamData.symbol || streamData.s
+
+    if (!symbol || typeof symbol !== 'string' || symbol === 'undefined') {
+      console.warn('⚠️ Dados de mercado recebidos sem symbol válido:', streamData)
+      return
+    }
 
     if (data.stream.includes("@kline_")) {
       const kline = streamData.k
@@ -493,6 +504,11 @@ export class OrderService {
    * 🔥 CORRIGIDO: Busca klines do cache WebSocket (carrega histórico sob demanda)
    */
   async getKlines(symbol: string): Promise<any[]> {
+    if (!symbol || typeof symbol !== 'string' || symbol.trim() === '' || symbol === 'undefined') {
+      console.error('[orderService] Symbol inválido:', symbol, new Error().stack)
+      return
+    }
+
     const cached = this.klinesCache.get(symbol)
 
     if (cached && cached.length > 0) {
@@ -533,26 +549,53 @@ export class OrderService {
     return this.getAccountBalanceREST()
   }
 
-  /**
-   * 🔥 OTIMIZADO: Ordens abertas do cache em vez de REST
-   */
   async getAllOpenOrders(symbol?: string): Promise<any[]> {
-    if (symbol) {
-      return this.openOrdersCache.get(symbol) || []
-    }
+  // Caso símbolo válido
+  if (symbol && typeof symbol === 'string' && symbol.trim() !== '' && symbol !== 'undefined') {
+    let cached = this.openOrdersCache.get(symbol) || [];
 
-    // Retorna todas as ordens de todos os símbolos
-    const allOrders: any[] = []
-    for (const orders of this.openOrdersCache.values()) {
-      allOrders.push(...orders)
+    // Se cache vazio, faz fallback via REST
+    if (cached.length === 0) {
+      try {
+        const timestamp = Date.now() + getTimeOffset();
+        const recvWindow = 30000;
+        const query = `symbol=${symbol}&timestamp=${timestamp}&recvWindow=${recvWindow}`;
+        const signature = this.sign(query);
+        const url = `${BASE_URL}/fapi/v1/openOrders?${query}&signature=${signature}`;
+        const resp = await axiosClient.get<any[]>(url, {
+          headers: { "X-MBX-APIKEY": process.env.BINANCE_API_KEY },
+        });
+        cached = resp.data || [];
+        // Atualiza cache
+        this.openOrdersCache.set(symbol, cached);
+        if (cached.length) {
+          console.log(`[OrderService] Fallback REST carregou ${cached.length} ordens abertas para ${symbol}`);
+        }
+      } catch (err) {
+        console.warn(`[OrderService] Fallback REST falhou para openOrders em ${symbol}:`, (err as any)?.message || err);
+        // retorna vazio mesmo em erro
+      }
     }
-    return allOrders
+    return cached;
   }
+
+  // Caso sem símbolo, retorna todas as ordens de todos os símbolos (sem fallback)
+  const allOrders: any[] = [];
+  for (const orders of this.openOrdersCache.values()) {
+    allOrders.push(...orders);
+  }
+  return allOrders;
+}
 
   /**
    * 🔥 OTIMIZADO: Preço atual do ticker cache
    */
   getCurrentPrice(symbol: string): number {
+    if (!symbol || typeof symbol !== 'string' || symbol.trim() === '' || symbol === 'undefined') {
+      console.error('[orderService] Symbol inválido:', symbol, new Error().stack)
+      return
+    }
+
     const ticker = this.tickerCache.get(symbol)
     if (ticker) {
       return Number.parseFloat(ticker.price)
@@ -646,6 +689,11 @@ export class OrderService {
 
   // 🔄 MÉTODOS EXISTENTES (mantidos iguais)
   async placeBracketOrder(symbol: string, side: "BUY" | "SELL", tpPrice: number, slPrice: number): Promise<void> {
+    if (!symbol || typeof symbol !== 'string' || symbol.trim() === '' || symbol === 'undefined') {
+      console.error('[orderService] Symbol inválido:', symbol, new Error().stack)
+      return
+    }
+
     // Usa getKlines otimizado em vez de fetchKlines
     const klines = await this.getKlines(symbol)
     if (!klines.length) return
@@ -683,6 +731,11 @@ export class OrderService {
   }
 
   async placeOrder(symbol: string, side: "BUY" | "SELL"): Promise<void> {
+    if (!symbol || typeof symbol !== 'string' || symbol.trim() === '' || symbol === 'undefined') {
+      console.error('[orderService] Symbol inválido:', symbol, new Error().stack)
+      return
+    }
+
     const filters = (await fetchExchangeFilters())[symbol]
     if (!filters) return
 
@@ -752,6 +805,11 @@ export class OrderService {
 
   // Outros métodos mantidos iguais...
   async placeCloseOrder(symbol: string, side: "BUY" | "SELL", qty: string): Promise<void> {
+    if (!symbol || typeof symbol !== 'string' || symbol.trim() === '' || symbol === 'undefined') {
+      console.error('[orderService] Symbol inválido:', symbol, new Error().stack)
+      return
+    }
+
     const timestamp = Date.now() + getTimeOffset()
     const recvWindow = 30000
 
@@ -771,6 +829,11 @@ export class OrderService {
   }
 
   async cancelOpenOrders(symbol: string): Promise<void> {
+    if (!symbol || typeof symbol !== 'string' || symbol.trim() === '' || symbol === 'undefined') {
+      console.error('[orderService] Symbol inválido:', symbol, new Error().stack)
+      return
+    }
+
     try {
       const timestamp = Date.now() + getTimeOffset()
       const recvWindow = 30000
@@ -913,7 +976,7 @@ export class OrderService {
   // 🧹 CLEANUP COMPLETO - CORRIGIDO PARA EVITAR VAZAMENTOS
   async cleanup(): Promise<void> {
     console.log("🧹 Iniciando cleanup completo...")
-    
+
     this.isDestroyed = true
 
     // 1. Limpa intervalos
@@ -964,6 +1027,11 @@ export class OrderService {
 
   async placeOrderWithStops(symbol: string, side: "BUY" | "SELL", entryPrice: number, highs: number[], lows: number[]) {
     // Implementação mantida igual, mas usando getKlines otimizado
+    if (!symbol || typeof symbol !== 'string' || symbol.trim() === '' || symbol === 'undefined') {
+      console.error('[orderService] Symbol inválido:', symbol, new Error().stack)
+      return
+    }
+
     const klines = await this.getKlines(symbol)
     if (!klines.length) return
 
@@ -971,6 +1039,11 @@ export class OrderService {
   }
 
   async placeBracketOrderWithRetries(symbol: string, side: "BUY" | "SELL", tpPrice: number, slPrice: number) {
+    if (!symbol || typeof symbol !== 'string' || symbol.trim() === '' || symbol === 'undefined') {
+      console.error('[orderService] Symbol inválido:', symbol, new Error().stack)
+      return
+    }
+
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         console.log(`🎯 Tentativa ${attempt}/3 para abrir ordem em ${symbol}`)
