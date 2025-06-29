@@ -45,7 +45,7 @@ type Context = {
  */
 const THRESHOLDS = {
   emaCrossover: 0.5,           // distância % máxima para considerar suporte/resistência "perto"
-  minEmaDeltaPct: 0.1,       // distância mínima % entre EMAs após cruzamento
+  minEmaDeltaPct: 0.02,       // distância mínima % entre EMAs após cruzamento
   volume: 1_000_000,         // volume mínimo para considerar entrada por volume
   lsrBuy: 1.5,
   lsrSell: 2,
