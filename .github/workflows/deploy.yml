@@ -1,41 +1,34 @@
 name: Deploy para VPS
 
+# 🚀 Quando rodar esse deploy
 on:
   push:
     branches:
-      - main
+      - main  # pode ser 'master' se for o seu caso
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
-    environment: VPS
+    runs-on: ubuntu-latest  # Máquina virtual Linux usada para executar o job
 
     steps:
       - name: Clona o repositório
         uses: actions/checkout@v3
 
-      - name: Configura chave SSH
+      - name: Configura a chave SSH
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Envia código para a VPS (apaga tudo com --delete)
+      - name: Envia os arquivos para a VPS
         run: |
           rsync -avz --delete --exclude=".git" ./ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ secrets.VPS_PATH }}
 
-      - name: Recria o .env com os secrets da Binance
-        run: |
-          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
-            echo 'BINANCE_API_KEY=${{ secrets.BINANCE_API_KEY }}' > ${{ secrets.VPS_PATH }}/.env &&
-            echo 'BINANCE_API_SECRET=${{ secrets.BINANCE_API_SECRET }}' >> ${{ secrets.VPS_PATH }}/.env
-          "
-
-      - name: Instala dependências e executa/reinicia o bot
+      - name: Executa comandos de deploy na VPS
         run: |
           ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
             cd ${{ secrets.VPS_PATH }} &&
             npm install &&
-            pm2 start app.js --name robot-trader || pm2 restart robot-trader
+            pm2 restart robot-trader
           "
