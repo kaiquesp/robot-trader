@@ -21,13 +21,13 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Envia código para a VPS (apaga tudo com --delete)
+      - name: Envia código para a VPS (usando SCP)
         run: |
-          rsync -avz --delete --exclude=".git*" ./ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ secrets.VPS_PATH }}/
+          scp -r -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ./ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ secrets.VPS_PATH }}
 
       - name: Recria o .env com todas as variáveis
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
             cat <<EOF > ${{ secrets.VPS_PATH }}/.env
           TESTNET=${{ secrets.TESTNET }}
           BINANCE_API_KEY=${{ secrets.BINANCE_API_KEY }}
@@ -48,7 +48,7 @@ jobs:
 
       - name: Instala dependências e executa o bot
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
             cd ${{ secrets.VPS_PATH }} &&
             npm install &&
             pm2 restart robot-trader || pm2 start robot-trader --name robot-trader
