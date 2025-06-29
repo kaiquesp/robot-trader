@@ -1,34 +1,53 @@
 name: Deploy para VPS
 
-# 🚀 Quando rodar esse deploy
 on:
   push:
     branches:
-      - main  # pode ser 'master' se for o seu caso
+      - main
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest  # Máquina virtual Linux usada para executar o job
+    runs-on: ubuntu-latest
+    environment: VPS
 
     steps:
       - name: Clona o repositório
         uses: actions/checkout@v3
 
-      - name: Configura a chave SSH
+      - name: Configura chave SSH
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Envia os arquivos para a VPS
+      - name: Envia código para a VPS (apaga tudo com --delete)
         run: |
           rsync -avz --delete --exclude=".git" ./ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ secrets.VPS_PATH }}
 
-      - name: Executa comandos de deploy na VPS
+      - name: Recria o .env com todas as variáveis
+        run: |
+          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
+            echo 'TESTNET=${{ secrets.TESTNET }}' > ${{ secrets.VPS_PATH }}/.env &&
+            echo 'BINANCE_API_KEY=${{ secrets.BINANCE_API_KEY }}' >> ${{ secrets.VPS_PATH }}/.env &&
+            echo 'BINANCE_API_SECRET=${{ secrets.BINANCE_API_SECRET }}' >> ${{ secrets.VPS_PATH }}/.env &&
+            echo 'WHATSAPP_TARGET=${{ secrets.WHATSAPP_TARGET }}' >> ${{ secrets.VPS_PATH }}/.env &&
+            echo 'NUM_SYMBOLS=${{ secrets.NUM_SYMBOLS }}' >> ${{ secrets.VPS_PATH }}/.env &&
+            echo 'COLLECTION_TIME_MINUTES=${{ secrets.COLLECTION_TIME_MINUTES }}' >> ${{ secrets.VPS_PATH }}/.env &&
+            echo 'SINGLE_TIMEFRAME=${{ secrets.SINGLE_TIMEFRAME }}' >> ${{ secrets.VPS_PATH }}/.env &&
+            echo 'TIMEFRAMES=${{ secrets.TIMEFRAMES }}' >> ${{ secrets.VPS_PATH }}/.env &&
+            echo 'TP_ATR_MULT=${{ secrets.TP_ATR_MULT }}' >> ${{ secrets.VPS_PATH }}/.env &&
+            echo 'SL_ATR_MULT=${{ secrets.SL_ATR_MULT }}' >> ${{ secrets.VPS_PATH }}/.env &&
+            echo 'LEVERAGE=${{ secrets.LEVERAGE }}' >> ${{ secrets.VPS_PATH }}/.env &&
+            echo 'ENTRY_AMOUNT=${{ secrets.ENTRY_AMOUNT }}' >> ${{ secrets.VPS_PATH }}/.env &&
+            echo 'ATR_PERIOD=${{ secrets.ATR_PERIOD }}' >> ${{ secrets.VPS_PATH }}/.env &&
+            echo 'AUTO_START_BOT=${{ secrets.AUTO_START_BOT }}' >> ${{ secrets.VPS_PATH }}/.env
+          "
+
+      - name: Instala dependências e executa o bot
         run: |
           ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
             cd ${{ secrets.VPS_PATH }} &&
             npm install &&
-            pm2 restart robot-trader
+            pm2 start app.js --name robot-trader || pm2 restart robot-trader
           "
