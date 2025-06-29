@@ -103,7 +103,7 @@ export class PositionManager {
     const distanceToResistancePct = ((ctx.resistance - ctx.price) / ctx.price) * 100;
     const thresholdPct = 1; // %
 
-    const minDeltaPct = 0.1; // % distância mínima entre EMAs após cruzamento (histerese)
+    const minDeltaPct = 0.05; // % distância mínima entre EMAs após cruzamento (histerese)
     const deltaPct = Math.abs(ctx.emaFast - ctx.emaSlow) / ctx.price * 100;
 
     if (!ctx.price) {
