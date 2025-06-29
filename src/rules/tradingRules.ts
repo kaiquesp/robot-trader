@@ -76,52 +76,79 @@ const ruleSets: Record<TradingRule, ((context: Context) => Action | null)[]> = {
    * - Venda quando EMAs cruzam para baixo, tendência de baixa e próximo à resistência.
    */
   [TradingRule.emaCrossover34x72]: [
-    (ctx) => {
-      const crossedUp = isEmaCrossUp(ctx);
-      const distanceToSupportPct = ((ctx.price - ctx.support) / ctx.price) * 100;
-      const deltaPct = emaDeltaPct(ctx);
+  (ctx) => {
+    const crossedUp = isEmaCrossUp(ctx);
+    const distanceToSupportPct = ((ctx.price - ctx.support) / ctx.price) * 100;
+    const deltaPct = emaDeltaPct(ctx);
 
-      // 📋 Logs de debug para entender por que a entrada não ocorre
-      console.log('📊 Verificando entrada para', ctx.symbol);
-      console.log('➡️ EMA Fast:', ctx.emaFast, 'EMA Slow:', ctx.emaSlow);
-      console.log('➡️ Cruzamento ocorreu?', crossedUp);
-      console.log('➡️ Tendência:', ctx.trend);
-      console.log('➡️ Suporte:', ctx.support, 'Preço:', '➡️ Resistencia:', ctx.resistance, 'Preço:', ctx.price, 'Distância:', distanceToSupportPct.toFixed(2), '%');
-
-      if (
-        crossedUp &&
-        ctx.trend === 'UP' &&
-        distanceToSupportPct <= THRESHOLDS.emaCrossover &&
-        deltaPct >= THRESHOLDS.minEmaDeltaPct
-      ) {
-        console.log(`📈 Crossover UP + suporte perto (${distanceToSupportPct.toFixed(2)}%) + delta ${deltaPct.toFixed(2)}% → BUY`);
-        console.log('-------------------------------')
-        return 'BUY';
-      }
-      console.log('-------------------------------')
-      return null;
-    },
-    (ctx) => {
-      const crossedDown = isEmaCrossDown(ctx);
-      const distanceToResistancePct = ((ctx.resistance - ctx.price) / ctx.price) * 100;
-      const deltaPct = emaDeltaPct(ctx);
-
-      if (
-        crossedDown &&
-        ctx.trend === 'DOWN' &&
-        distanceToResistancePct <= THRESHOLDS.emaCrossover &&
-        deltaPct >= THRESHOLDS.minEmaDeltaPct
-      ) {
-        console.log(`📉 Crossover DOWN + resistência perto (${distanceToResistancePct.toFixed(2)}%) + delta ${deltaPct.toFixed(2)}% → SELL`);
-        console.log('-------------------------------')
-        return 'SELL';
-      }
-
-      console.log('⛔ Resultado da regra: null (sem entrada)');
-      console.log('-------------------------------')
-      return null;
+    if (
+      crossedUp &&
+      ctx.trend === 'UP' &&
+      distanceToSupportPct <= THRESHOLDS.emaCrossover &&
+      deltaPct >= THRESHOLDS.minEmaDeltaPct
+    ) {
+      console.log(
+        `📈 [${ctx.symbol}] BUY signal:
+        • EMA Cross Up:        ${crossedUp}
+        • Trend:               ${ctx.trend}
+        • Price:               ${ctx.price}
+        • Support:             ${ctx.support}
+        • Distance to Support: ${distanceToSupportPct.toFixed(2)}%
+        • EMA Delta:           ${deltaPct.toFixed(2)}%
+        `
+      );
+      console.log('-------------------------------');
+      return 'BUY';
     }
-  ],
+
+    console.log(
+      `🟡 [${ctx.symbol}] No BUY:
+      • EMA Cross Up:        ${crossedUp}
+      • Trend:               ${ctx.trend}
+      • Distance to Support: ${distanceToSupportPct.toFixed(2)}%
+      • EMA Delta:           ${deltaPct.toFixed(2)}%
+      `
+    );
+    console.log('-------------------------------');
+    return null;
+  },
+  (ctx) => {
+    const crossedDown = isEmaCrossDown(ctx);
+    const distanceToResistancePct = ((ctx.resistance - ctx.price) / ctx.price) * 100;
+    const deltaPct = emaDeltaPct(ctx);
+
+    if (
+      crossedDown &&
+      ctx.trend === 'DOWN' &&
+      distanceToResistancePct <= THRESHOLDS.emaCrossover &&
+      deltaPct >= THRESHOLDS.minEmaDeltaPct
+    ) {
+      console.log(
+        `📉 [${ctx.symbol}] SELL signal:
+        • EMA Cross Down:         ${crossedDown}
+        • Trend:                  ${ctx.trend}
+        • Price:                  ${ctx.price}
+        • Resistance:             ${ctx.resistance}
+        • Distance to Resistance: ${distanceToResistancePct.toFixed(2)}%
+        • EMA Delta:              ${deltaPct.toFixed(2)}%
+        `
+      );
+      console.log('-------------------------------');
+      return 'SELL';
+    }
+
+    console.log(
+      `🟡 [${ctx.symbol}] No SELL:
+      • EMA Cross Down:         ${crossedDown}
+      • Trend:                  ${ctx.trend}
+      • Distance to Resistance: ${distanceToResistancePct.toFixed(2)}%
+      • EMA Delta:              ${deltaPct.toFixed(2)}%
+      `
+    );
+    console.log('-------------------------------');
+    return null;
+  }
+],
 
   /**
    * Estratégia básica RSI + MACD:
