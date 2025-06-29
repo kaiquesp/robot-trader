@@ -49,5 +49,5 @@ jobs:
           ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
             cd ${{ secrets.VPS_PATH }} &&
             npm install &&
-            pm2 start app.js --name robot-trader || pm2 restart robot-trader
+            pm2 restart robot-trader
           "
