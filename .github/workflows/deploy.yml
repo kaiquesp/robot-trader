@@ -25,10 +25,31 @@ jobs:
         run: |
           rsync -avz --delete --exclude=".git" ./ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ secrets.VPS_PATH }}
 
+          - name: Recria o .env com todas as variáveis
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
+            cat <<EOF > ${{ secrets.VPS_PATH }}/.env
+          TESTNET=${{ secrets.TESTNET }}
+          BINANCE_API_KEY=${{ secrets.BINANCE_API_KEY }}
+          BINANCE_API_SECRET=${{ secrets.BINANCE_API_SECRET }}
+          WHATSAPP_TARGET=${{ secrets.WHATSAPP_TARGET }}
+          NUM_SYMBOLS=${{ secrets.NUM_SYMBOLS }}
+          COLLECTION_TIME_MINUTES=${{ secrets.COLLECTION_TIME_MINUTES }}
+          SINGLE_TIMEFRAME=${{ secrets.SINGLE_TIMEFRAME }}
+          TIMEFRAMES=${{ secrets.TIMEFRAMES }}
+          TP_ATR_MULT=${{ secrets.TP_ATR_MULT }}
+          SL_ATR_MULT=${{ secrets.SL_ATR_MULT }}
+          LEVERAGE=${{ secrets.LEVERAGE }}
+          ENTRY_AMOUNT=${{ secrets.ENTRY_AMOUNT }}
+          ATR_PERIOD=${{ secrets.ATR_PERIOD }}
+          AUTO_START_BOT=${{ secrets.AUTO_START_BOT }}
+          EOF
+          "
+
       - name: Executa comandos de deploy na VPS
         run: |
           ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
             cd ${{ secrets.VPS_PATH }} &&
             npm install &&
-            pm2 restart robot-trader
+            pm2 restart robot-trader || pm2 start robot-trader
           "
