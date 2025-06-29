@@ -25,7 +25,7 @@ jobs:
         run: |
           rsync -avz --delete --exclude=".git" ./ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ secrets.VPS_PATH }}
 
-          - name: Recria o .env com todas as variáveis
+      - name: Recria o .env com todas as variáveis
         run: |
           ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
             cat <<EOF > ${{ secrets.VPS_PATH }}/.env
