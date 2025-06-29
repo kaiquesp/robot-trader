@@ -91,6 +91,8 @@ export class PositionManager {
       emaSlow: ind.emaSlow ?? 0,
       emaFastPrev: ind.emaFastPrev ?? 0,
       emaSlowPrev: ind.emaSlowPrev ?? 0,
+      emaFastArr: Array.isArray(ind.emaFastArr) ? ind.emaFastArr : [],
+      emaSlowArr: Array.isArray(ind.emaSlowArr) ? ind.emaSlowArr : [],
       lastPrices: ind.closes?.slice(-20) ?? []
     };
   }

@@ -72,7 +72,9 @@ export class IndicatorService {
         emaFast: 0,
         emaSlow: 0,
         emaFastPrev: 0,
-        emaSlowPrev: 0
+        emaSlowPrev: 0,
+        emaFastArr: [],
+        emaSlowArr: [],
       };
     }
 
@@ -110,6 +112,9 @@ export class IndicatorService {
     const emaFastPrev = emaFastArray[emaFastArray.length - 2] ?? 0;
     const emaSlowPrev = emaSlowArray[emaSlowArray.length - 2] ?? 0;
 
+    const emaFastArr = emaFastArray.filter(x => !isNaN(x)).slice(-15);
+    const emaSlowArr = emaSlowArray.filter(x => !isNaN(x)).slice(-15);
+
     // LSR, OI, Funding: proteja o fetch
     let lsr = 0, oi = 0, funding = 0;
     try { lsr = await fetchLongShortRatio(symbol) ?? 0; } catch (err) { console.warn(`[LSR] ${symbol}:`, err); }
@@ -143,7 +148,9 @@ export class IndicatorService {
       emaFast: emaFastCurr,
       emaSlow: emaSlowCurr,
       emaFastPrev,
-      emaSlowPrev
+      emaSlowPrev,
+      emaFastArr,
+      emaSlowArr,
     };
   }
 }

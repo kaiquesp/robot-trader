@@ -1,7 +1,7 @@
 import type { Indicators } from "../models/Indicators"
 import type { OpenPosition } from "./positionManager"
 import type { PositionManager } from "./positionManager"
-import { calculateATR, calculateRSI } from "../utils/indicators"
+import { calculateATR, calculateEMA, calculateRSI } from "../utils/indicators"
 import type { FileService } from "../services/fileService"
 import { AxiosError } from "axios"
 import { countTP_SL } from "../services/tradeStatsService"
@@ -193,12 +193,14 @@ export class BotController {
             closes,
             highs,
             lows,
-            rsi: Array.isArray(rsi) ? (rsi.length ? rsi[rsi.length - 1] : 50) : rsi, // <-- Corrigido!
+            rsi: Array.isArray(rsi) ? (rsi.length ? rsi[rsi.length - 1] : 50) : rsi,
             atr,
             emaFast: 0,
             emaSlow: 0,
             emaFastPrev: 0,
-            emaSlowPrev: 0
+            emaSlowPrev: 0,
+            emaFastArr: [],
+            emaSlowArr: [],
           };
 
           const mapIndicatorsToContext = this.positionManager.mapIndicatorsToContext(ind, symbol);

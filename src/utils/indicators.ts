@@ -4,6 +4,11 @@
  * Exponential Moving Average
  */
 export function calculateEMA(data: number[], period: number): number[] {
+  // ✅ Validação defensiva
+  if (!Array.isArray(data) || data.length < period) {
+    return Array(data.length).fill(NaN); // retorna um array do mesmo tamanho com NaNs
+  }
+
   const k = 2 / (period + 1);
   const ema: number[] = [];
   let prevEma: number | undefined;

@@ -30,4 +30,6 @@ export interface Indicators {
   emaSlow: number;
   emaFastPrev: number;
   emaSlowPrev: number;
+  emaFastArr: number[];
+  emaSlowArr: number[];
 }

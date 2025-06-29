@@ -37,6 +37,8 @@ type Context = {
   emaSlow: number;
   emaFastPrev: number;
   emaSlowPrev: number;
+  emaFastArr: number[];
+  emaSlowArr: number[];
   lastPrices: number[];
 };
 
@@ -52,18 +54,6 @@ const THRESHOLDS = {
   supportDelta: 0.01         // % para checar proximidade do suporte/resistência
 };
 
-/**
- * Helpers para simplificar lógica de cruzamento de EMAs.
- */
-function isEmaCrossUp(ctx: Context) {
-  return ctx.emaFast > ctx.emaSlow && ctx.emaFastPrev <= ctx.emaSlowPrev;
-}
-function isEmaCrossDown(ctx: Context) {
-  return ctx.emaFast < ctx.emaSlow && ctx.emaFastPrev >= ctx.emaSlowPrev;
-}
-function emaDeltaPct(ctx: Context) {
-  return Math.abs(ctx.emaFast - ctx.emaSlow) / ctx.price * 100;
-}
 
 /**
  * Regras modulares agrupadas por estratégia/indicador.
@@ -77,7 +67,7 @@ const ruleSets: Record<TradingRule, ((context: Context) => Action | null)[]> = {
    */
   [TradingRule.emaCrossover34x72]: [
   (ctx) => {
-    const crossedUp = isEmaCrossUp(ctx);
+    const crossedUp = isEmaCrossUp(ctx, 15); // ou outro valor para lookback
     const distanceToSupportPct = ((ctx.price - ctx.support) / ctx.price) * 100;
     const deltaPct = emaDeltaPct(ctx);
 
@@ -216,5 +206,39 @@ function allTriggeredActions(ruleSetName: TradingRule, context: Context): Action
   const rules = ruleSets[ruleSetName] || [];
   return rules.map(rule => rule(context)).filter(x => x !== null) as Action[];
 }
+
+// ----------------------
+// 📍 Helpers de EMA
+// ----------------------
+
+function emaDeltaPct(ctx: Context) {
+  return Math.abs(ctx.emaFast - ctx.emaSlow) / ctx.price * 100;
+}
+
+// ✅ Substitui as antigas isEmaCrossUp/isEmaCrossDown por essas:
+function isEmaCrossUp(ctx: Context, lookback = 5) {
+  for (let i = 1; i <= lookback; i++) {
+    const prevFast = ctx.emaFastArr[ctx.emaFastArr.length - i - 1];
+    const prevSlow = ctx.emaSlowArr[ctx.emaSlowArr.length - i - 1];
+    const currFast = ctx.emaFastArr[ctx.emaFastArr.length - i];
+    const currSlow = ctx.emaSlowArr[ctx.emaSlowArr.length - i];
+
+    if (prevFast <= prevSlow && currFast > currSlow) return true;
+  }
+  return false;
+}
+
+function isEmaCrossDown(ctx: Context, lookback = 5) {
+  for (let i = 1; i <= lookback; i++) {
+    const prevFast = ctx.emaFastArr[ctx.emaFastArr.length - i - 1];
+    const prevSlow = ctx.emaSlowArr[ctx.emaSlowArr.length - i - 1];
+    const currFast = ctx.emaFastArr[ctx.emaFastArr.length - i];
+    const currSlow = ctx.emaSlowArr[ctx.emaSlowArr.length - i];
+
+    if (prevFast >= prevSlow && currFast < currSlow) return true;
+  }
+  return false;
+}
+
 
 export { ruleSets, determineAction, allTriggeredActions, Context, Action, THRESHOLDS };
