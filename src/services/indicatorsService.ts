@@ -38,7 +38,7 @@ export class IndicatorService {
   async fetchIndicators(symbol: string): Promise<Indicators> {
     const interval = BOT_TIMEFRAME;
     const endTime = Date.now();
-    const startTime = endTime - 250 * intervalToMs(interval);
+    const startTime = endTime - 251 * intervalToMs(interval);
 
     const raw = await fetchAllKlines(symbol, interval, startTime, endTime);
 

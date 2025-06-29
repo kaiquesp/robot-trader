@@ -14,6 +14,7 @@ export class BotController {
   private positionCache: Map<string, { position: OpenPosition | null; timestamp: number }> = new Map()
   private readonly CACHE_TTL = 10000 // Reduzido para 10 segundos
   private readonly ORDER_PROCESSING_DELAY = 3000 // Aumentado para 3 segundos
+  private shouldStop = false;
 
   constructor(
     private positionService: {
@@ -42,6 +43,13 @@ export class BotController {
     private positionManager: PositionManager,
     private fileService: FileService,
   ) { }
+
+  public requestStop() {
+    this.shouldStop = true;
+  }
+  public resetStop() {
+    this.shouldStop = false;
+  }
 
   private async getPositionSafe(symbol: string, forceRefresh = false): Promise<OpenPosition | null> {
     const cached = this.positionCache.get(symbol)
@@ -99,6 +107,7 @@ export class BotController {
   }
 
   async run(symbols: string[] = []) {
+    this.resetStop();
     const hoursBack = 24
     const sinceTs = Date.now() - hoursBack * 3600 * 1000
 
@@ -116,6 +125,11 @@ export class BotController {
     const openedThisCycle = new Set<string>()
 
     for (const symbol of symbols) {
+      if (this.shouldStop) {
+        console.warn("🛑 Execução interrompida pelo usuário (stop chamado)");
+        break; // Ou return, se preferir sair totalmente
+      }
+
       if (!symbol || typeof symbol !== 'string' || symbol === 'undefined') {
         console.warn('⚠️ Symbol inválido na lista de símbolos, pulando:', symbol)
         continue
@@ -187,7 +201,7 @@ export class BotController {
             emaSlowPrev: 0
           };
 
-          const mapIndicatorsToContext = this.positionManager.mapIndicatorsToContext(ind);
+          const mapIndicatorsToContext = this.positionManager.mapIndicatorsToContext(ind, symbol);
           if (this.positionManager.shouldClosePosition(symbol, existing, mapIndicatorsToContext)) {
             const side = existing.side === "BUY" ? "SELL" : "BUY"
             const qty = Math.abs(existing.positionAmt).toFixed(6)

@@ -4,7 +4,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "npx tsc && node dist/index.js",
+    "start": "npx tsc && node dist/server.js",
     "build:start": "npm run build && npm run start",
     "backtest": "ts-node src/backtest/oneYearBacktest.ts",
     "multiTimeframeBacktest": "ts-node src/backtest/multiTimeframeBacktest.ts",

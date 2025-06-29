@@ -10,14 +10,19 @@ import { fileService } from './services/fileService';
 import { BotEngine } from './robot/botEngine';
 import { OrderServiceAdapter } from './robot/orderServiceAdapter';
 import { WebSocketServer } from 'ws';
+import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
 
 const app = express();
-const port = process.env.PORT || 3000;
-const WS_REALTIME_LOG_PORT = 3001;
-const WS_FILE_LOG_PORT = 3002;
-const WS_POSITIONS_PORT = 3003;
+const port = process.env.PORT || 3001;
+const WS_REALTIME_LOG_PORT = 3002;
+const WS_FILE_LOG_PORT = 3003;
+const WS_POSITIONS_PORT = 3004;
+
+app.use(cors({
+  origin: 'http://localhost:4200'
+}));
 
 app.use(bodyParser.json());
 
@@ -260,7 +265,7 @@ wsPositionsServer.on('connection', async (ws) => {
         }
       }
     } catch (err) {
-      console.error('❌ Erro ao enviar positions-stats:', err?.message || err);
+      console.error('❌ Erro ao enviar positions-stats:', (err as any).message || err);
     }
   }, 5000);
 

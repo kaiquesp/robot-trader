@@ -11,6 +11,7 @@ type Action = 'BUY' | 'SELL' | 'HOLD';
  * Contexto: todos os indicadores e valores do candle/símbolo para tomada de decisão.
  */
 type Context = {
+  symbol: string;
   rsi: number;
   macd: number;
   volume: number;
@@ -43,7 +44,7 @@ type Context = {
  * Parametrização dos thresholds para facilitar ajustes finos em tempo de execução.
  */
 const THRESHOLDS = {
-  emaCrossover: 1,           // distância % máxima para considerar suporte/resistência "perto"
+  emaCrossover: 0.5,           // distância % máxima para considerar suporte/resistência "perto"
   minEmaDeltaPct: 0.1,       // distância mínima % entre EMAs após cruzamento
   volume: 1_000_000,         // volume mínimo para considerar entrada por volume
   lsrBuy: 1.5,
@@ -80,6 +81,13 @@ const ruleSets: Record<TradingRule, ((context: Context) => Action | null)[]> = {
       const distanceToSupportPct = ((ctx.price - ctx.support) / ctx.price) * 100;
       const deltaPct = emaDeltaPct(ctx);
 
+      // 📋 Logs de debug para entender por que a entrada não ocorre
+      console.log('📊 Verificando entrada para', ctx.symbol);
+      console.log('➡️ EMA Fast:', ctx.emaFast, 'EMA Slow:', ctx.emaSlow);
+      console.log('➡️ Cruzamento ocorreu?', crossedUp);
+      console.log('➡️ Tendência:', ctx.trend);
+      console.log('➡️ Suporte:', ctx.support, 'Preço:', '➡️ Resistencia:', ctx.resistance, 'Preço:', ctx.price, 'Distância:', distanceToSupportPct.toFixed(2), '%');
+
       if (
         crossedUp &&
         ctx.trend === 'UP' &&
@@ -87,8 +95,10 @@ const ruleSets: Record<TradingRule, ((context: Context) => Action | null)[]> = {
         deltaPct >= THRESHOLDS.minEmaDeltaPct
       ) {
         console.log(`📈 Crossover UP + suporte perto (${distanceToSupportPct.toFixed(2)}%) + delta ${deltaPct.toFixed(2)}% → BUY`);
+        console.log('-------------------------------')
         return 'BUY';
       }
+      console.log('-------------------------------')
       return null;
     },
     (ctx) => {
@@ -103,8 +113,12 @@ const ruleSets: Record<TradingRule, ((context: Context) => Action | null)[]> = {
         deltaPct >= THRESHOLDS.minEmaDeltaPct
       ) {
         console.log(`📉 Crossover DOWN + resistência perto (${distanceToResistancePct.toFixed(2)}%) + delta ${deltaPct.toFixed(2)}% → SELL`);
+        console.log('-------------------------------')
         return 'SELL';
       }
+
+      console.log('⛔ Resultado da regra: null (sem entrada)');
+      console.log('-------------------------------')
       return null;
     }
   ],

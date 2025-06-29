@@ -97,10 +97,18 @@ export class BotEngine {
         await this.orderService.cleanup();
         console.log("✅ WebSockets fechados");
 
-        this.bot = null;
-        this.tradingSymbols = [];
+        if (this.bot) {
+            this.bot.requestStop();
+            this.bot = null;
+            this.tradingSymbols = [];
+            console.log("👋 BotEngine parado com sucesso.");
+        } else {
+            console.warn('BotController não inicializado, impossível enviar requestStop()');
+        }
 
-        console.log("👋 BotEngine parado com sucesso.");
+
+
+
     }
 
     private async runCycle() {

@@ -1,0 +1,34 @@
+name: Deploy para VPS
+
+# 🚀 Quando rodar esse deploy
+on:
+  push:
+    branches:
+      - main  # pode ser 'master' se for o seu caso
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest  # Máquina virtual Linux usada para executar o job
+
+    steps:
+      - name: Clona o repositório
+        uses: actions/checkout@v3
+
+      - name: Configura a chave SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Envia os arquivos para a VPS
+        run: |
+          rsync -avz --delete --exclude=".git" ./ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ secrets.VPS_PATH }}
+
+      - name: Executa comandos de deploy na VPS
+        run: |
+          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
+            cd ${{ secrets.VPS_PATH }} &&
+            npm install &&
+            pm2 restart app.js
+          "

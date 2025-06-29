@@ -46,13 +46,13 @@ export class PositionManager {
     }
 
     const indicators = await indicatorService.fetchIndicators(symbol);
-    const context = this.mapIndicatorsToContext(indicators);
+    const context = this.mapIndicatorsToContext(indicators, symbol);
     const action = determineAction(ruleSet, context);
 
     return action;
   }
 
-  mapIndicatorsToContext(ind: Indicators): Context {
+  mapIndicatorsToContext(ind: Indicators, symbol: string,): Context {
     const n = ind.closes?.length ? ind.closes.length - 1 : 0;
 
     // Corrigido: pega o último valor do array do RSI, se existir
@@ -64,6 +64,7 @@ export class PositionManager {
           : 50; // fallback neutro
 
     return {
+      symbol: symbol,
       rsi: latestRsi,
       macd: ind.macd ?? 0,
       volume: ind.volumes?.[n] ?? 0,

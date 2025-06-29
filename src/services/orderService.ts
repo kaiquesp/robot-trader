@@ -361,8 +361,14 @@ export class OrderService {
 
       case "ORDER_TRADE_UPDATE":
         // Atualiza cache de ordens
-        const order = data.o
-        const symbol = order.symbol
+        const order = data.o;
+        const symbol = order?.symbol || 'UNKNOWN';
+        const status = order?.orderStatus || 'UNKNOWN';
+
+        if (!order || !symbol || symbol === 'UNKNOWN') {
+          console.warn('[OrderService] Ordem recebida sem symbol:', order);
+          return;
+        }
 
         if (!this.openOrdersCache.has(symbol)) {
           this.openOrdersCache.set(symbol, [])
@@ -385,7 +391,7 @@ export class OrderService {
           }
         }
 
-        console.log(`📋 Order Update: ${symbol} - ${order.orderStatus}`)
+        console.log(`📋 Order Update: ${symbol} - ${status}`);
         break
     }
   }
@@ -550,42 +556,42 @@ export class OrderService {
   }
 
   async getAllOpenOrders(symbol?: string): Promise<any[]> {
-  // Caso símbolo válido
-  if (symbol && typeof symbol === 'string' && symbol.trim() !== '' && symbol !== 'undefined') {
-    let cached = this.openOrdersCache.get(symbol) || [];
+    // Caso símbolo válido
+    if (symbol && typeof symbol === 'string' && symbol.trim() !== '' && symbol !== 'undefined') {
+      let cached = this.openOrdersCache.get(symbol) || [];
 
-    // Se cache vazio, faz fallback via REST
-    if (cached.length === 0) {
-      try {
-        const timestamp = Date.now() + getTimeOffset();
-        const recvWindow = 30000;
-        const query = `symbol=${symbol}&timestamp=${timestamp}&recvWindow=${recvWindow}`;
-        const signature = this.sign(query);
-        const url = `${BASE_URL}/fapi/v1/openOrders?${query}&signature=${signature}`;
-        const resp = await axiosClient.get<any[]>(url, {
-          headers: { "X-MBX-APIKEY": process.env.BINANCE_API_KEY },
-        });
-        cached = resp.data || [];
-        // Atualiza cache
-        this.openOrdersCache.set(symbol, cached);
-        if (cached.length) {
-          console.log(`[OrderService] Fallback REST carregou ${cached.length} ordens abertas para ${symbol}`);
+      // Se cache vazio, faz fallback via REST
+      if (cached.length === 0) {
+        try {
+          const timestamp = Date.now() + getTimeOffset();
+          const recvWindow = 30000;
+          const query = `symbol=${symbol}&timestamp=${timestamp}&recvWindow=${recvWindow}`;
+          const signature = this.sign(query);
+          const url = `${BASE_URL}/fapi/v1/openOrders?${query}&signature=${signature}`;
+          const resp = await axiosClient.get<any[]>(url, {
+            headers: { "X-MBX-APIKEY": process.env.BINANCE_API_KEY },
+          });
+          cached = resp.data || [];
+          // Atualiza cache
+          this.openOrdersCache.set(symbol, cached);
+          if (cached.length) {
+            console.log(`[OrderService] Fallback REST carregou ${cached.length} ordens abertas para ${symbol}`);
+          }
+        } catch (err) {
+          console.warn(`[OrderService] Fallback REST falhou para openOrders em ${symbol}:`, (err as any)?.message || err);
+          // retorna vazio mesmo em erro
         }
-      } catch (err) {
-        console.warn(`[OrderService] Fallback REST falhou para openOrders em ${symbol}:`, (err as any)?.message || err);
-        // retorna vazio mesmo em erro
       }
+      return cached;
     }
-    return cached;
-  }
 
-  // Caso sem símbolo, retorna todas as ordens de todos os símbolos (sem fallback)
-  const allOrders: any[] = [];
-  for (const orders of this.openOrdersCache.values()) {
-    allOrders.push(...orders);
+    // Caso sem símbolo, retorna todas as ordens de todos os símbolos (sem fallback)
+    const allOrders: any[] = [];
+    for (const orders of this.openOrdersCache.values()) {
+      allOrders.push(...orders);
+    }
+    return allOrders;
   }
-  return allOrders;
-}
 
   /**
    * 🔥 OTIMIZADO: Preço atual do ticker cache
@@ -593,7 +599,7 @@ export class OrderService {
   getCurrentPrice(symbol: string): number {
     if (!symbol || typeof symbol !== 'string' || symbol.trim() === '' || symbol === 'undefined') {
       console.error('[orderService] Symbol inválido:', symbol, new Error().stack)
-      return
+      return 0;
     }
 
     const ticker = this.tickerCache.get(symbol)
