@@ -98,6 +98,12 @@ export class PositionService {
       this.ws.on('message', (data) => {
         try {
           const msg = JSON.parse(data.toString());
+          // Verifique erro de listenKey expirada
+          if (msg.code === -1125 && msg.msg && msg.msg.includes('listenKey')) {
+            this.log('[PositionService] ListenKey expirada ou inexistente! Forçando reconexão...');
+            this.scheduleReconnect();
+            return;
+          }
           this.handleWsMessage(msg);
         } catch (err) {
           this.log('[PositionService] Erro ao parsear WS:', err);
@@ -134,6 +140,7 @@ export class PositionService {
         this.log('[PositionService] ListenKey renovada com sucesso.');
       } catch (err: any) {
         this.log('[PositionService] Erro ao renovar listenKey:', err?.response?.data?.msg || err.message);
+        this.scheduleReconnect();
       }
     }, 20 * 60 * 1000); // 20 minutos
   }
