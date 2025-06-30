@@ -256,7 +256,7 @@ wsPositionsServer.on('connection', async (ws) => {
         totalOpenPositions: positions.length,
         positions: positionsData,
         totalPnl: totalPnl,
-        realizedPnlToday: realizedPnl
+        realizedPnlToday: realizedPnl.toFixed(2)
       });
 
       for (const client of positionsClients) {

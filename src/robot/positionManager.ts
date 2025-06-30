@@ -114,7 +114,7 @@ export class PositionManager {
     }
 
     if (pos.side === 'BUY') {
-      if (crossedDown && ctx.trend === 'DOWN' && deltaPct >= minDeltaPct) {
+      if (crossedDown && deltaPct >= minDeltaPct) {
         console.log(
           `✅ [${symbol}] Fechando BUY → Crossover DOWN + resistência perto (${distanceToResistancePct.toFixed(2)}%) + delta ${deltaPct.toFixed(2)}%`
         );
@@ -122,7 +122,7 @@ export class PositionManager {
       }
     }
     else if (pos.side === 'SELL') {
-      if (crossedUp && ctx.trend === 'UP' && deltaPct >= minDeltaPct) {
+      if (crossedUp && deltaPct >= minDeltaPct) {
         console.log(
           `✅ [${symbol}] Fechando SELL → Crossover UP + suporte perto (${distanceToSupportPct.toFixed(2)}%) + delta ${deltaPct.toFixed(2)}%`
         );

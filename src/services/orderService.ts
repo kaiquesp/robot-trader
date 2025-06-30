@@ -800,6 +800,7 @@ export class OrderService {
     this.positionsCache = resp.data
       .filter((p) => Number.parseFloat(p.positionAmt) !== 0)
       .map((p) => ({
+        ...p,
         symbol: p.symbol,
         side: Number.parseFloat(p.positionAmt) > 0 ? "BUY" : "SELL",
         entryPrice: Number.parseFloat(p.entryPrice),
