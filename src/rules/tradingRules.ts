@@ -77,29 +77,29 @@ const ruleSets: Record<TradingRule, ((context: Context) => Action | null)[]> = {
       distanceToSupportPct <= THRESHOLDS.emaCrossover &&
       deltaPct >= THRESHOLDS.minEmaDeltaPct
     ) {
-      console.log(
-        `📈 [${ctx.symbol}] BUY signal:
-        • EMA Cross Up:        ${crossedUp}
-        • Trend:               ${ctx.trend}
-        • Price:               ${ctx.price}
-        • Support:             ${ctx.support}
-        • Distance to Support: ${distanceToSupportPct.toFixed(2)}%
-        • EMA Delta:           ${deltaPct.toFixed(2)}%
-        `
-      );
-      console.log('-------------------------------');
+      // console.log(
+      //   `📈 [${ctx.symbol}] BUY signal:
+      //   • EMA Cross Up:        ${crossedUp}
+      //   • Trend:               ${ctx.trend}
+      //   • Price:               ${ctx.price}
+      //   • Support:             ${ctx.support}
+      //   • Distance to Support: ${distanceToSupportPct.toFixed(2)}%
+      //   • EMA Delta:           ${deltaPct.toFixed(2)}%
+      //   `
+      // );
+      // console.log('-------------------------------');
       return 'BUY';
     }
 
-    console.log(
-      `🟡 [${ctx.symbol}] No BUY:
-      • EMA Cross Up:        ${crossedUp}
-      • Trend:               ${ctx.trend}
-      • Distance to Support: ${distanceToSupportPct.toFixed(2)}%
-      • EMA Delta:           ${deltaPct.toFixed(2)}%
-      `
-    );
-    console.log('-------------------------------');
+    // console.log(
+    //   `🟡 [${ctx.symbol}] No BUY:
+    //   • EMA Cross Up:        ${crossedUp}
+    //   • Trend:               ${ctx.trend}
+    //   • Distance to Support: ${distanceToSupportPct.toFixed(2)}%
+    //   • EMA Delta:           ${deltaPct.toFixed(2)}%
+    //   `
+    // );
+    // console.log('-------------------------------');
     return null;
   },
   (ctx) => {
@@ -113,29 +113,29 @@ const ruleSets: Record<TradingRule, ((context: Context) => Action | null)[]> = {
       distanceToResistancePct <= THRESHOLDS.emaCrossover &&
       deltaPct >= THRESHOLDS.minEmaDeltaPct
     ) {
-      console.log(
-        `📉 [${ctx.symbol}] SELL signal:
-        • EMA Cross Down:         ${crossedDown}
-        • Trend:                  ${ctx.trend}
-        • Price:                  ${ctx.price}
-        • Resistance:             ${ctx.resistance}
-        • Distance to Resistance: ${distanceToResistancePct.toFixed(2)}%
-        • EMA Delta:              ${deltaPct.toFixed(2)}%
-        `
-      );
-      console.log('-------------------------------');
+      // console.log(
+      //   `📉 [${ctx.symbol}] SELL signal:
+      //   • EMA Cross Down:         ${crossedDown}
+      //   • Trend:                  ${ctx.trend}
+      //   • Price:                  ${ctx.price}
+      //   • Resistance:             ${ctx.resistance}
+      //   • Distance to Resistance: ${distanceToResistancePct.toFixed(2)}%
+      //   • EMA Delta:              ${deltaPct.toFixed(2)}%
+      //   `
+      // );
+      // console.log('-------------------------------');
       return 'SELL';
     }
 
-    console.log(
-      `🟡 [${ctx.symbol}] No SELL:
-      • EMA Cross Down:         ${crossedDown}
-      • Trend:                  ${ctx.trend}
-      • Distance to Resistance: ${distanceToResistancePct.toFixed(2)}%
-      • EMA Delta:              ${deltaPct.toFixed(2)}%
-      `
-    );
-    console.log('-------------------------------');
+    // console.log(
+    //   `🟡 [${ctx.symbol}] No SELL:
+    //   • EMA Cross Down:         ${crossedDown}
+    //   • Trend:                  ${ctx.trend}
+    //   • Distance to Resistance: ${distanceToResistancePct.toFixed(2)}%
+    //   • EMA Delta:              ${deltaPct.toFixed(2)}%
+    //   `
+    // );
+    // console.log('-------------------------------');
     return null;
   }
 ],
