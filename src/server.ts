@@ -242,7 +242,7 @@ wsPositionsServer.on('connection', async (ws) => {
           entryPrice: pos.entryPrice,
           positionAmt: pos.positionAmt,
           currentPrice,
-          pnl: pnl.toFixed(2)
+          pnl: Number(pnl.toFixed(2))
         };
       });
 
@@ -255,8 +255,8 @@ wsPositionsServer.on('connection', async (ws) => {
         timestamp: new Date().toISOString(),
         totalOpenPositions: positions.length,
         positions: positionsData,
-        totalPnl: totalPnl.toFixed(2),
-        realizedPnlToday: realizedPnl.toFixed(2)
+        totalPnl: Number(totalPnl.toFixed(2)),
+        realizedPnlToday: Number(realizedPnl.toFixed(2))
       });
 
       for (const client of positionsClients) {
