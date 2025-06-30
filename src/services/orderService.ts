@@ -14,7 +14,7 @@ import { BOT_TIMEFRAME } from "../configs/botConstants"
 
 const BASE_URL = process.env.TESTNET === "true" ? "https://testnet.binancefuture.com" : "https://fapi.binance.com"
 const WS_BASE_URL = process.env.TESTNET === "true" ? "wss://stream.binancefuture.com" : "wss://fstream.binance.com"
-const tradeAmount = Number.parseFloat(process.env.ENTRY_AMOUNT || "15")
+const tradeAmount = Number.parseFloat(process.env.ENTRY_AMOUNT || "30")
 
 interface KlineData {
   symbol: string
